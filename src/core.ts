@@ -16,6 +16,9 @@ export function read_file(args: { file: `${string}.tsv` }): SheetData<string>[]
 export function read_file(args: {
   file: `${string}.xlsx`
 }): SheetData<CellValue>[]
+export function read_file(args: {
+  file: `${string}.json`
+}): SheetData<CellValue>[]
 export function read_file(args: { file: string }): SheetData<CellValue>[]
 export function read_file(args: { file: string }): SheetData<CellValue>[] {
   let file = args.file
@@ -32,6 +35,9 @@ export function read_file(args: { file: string }): SheetData<CellValue>[] {
     }
     case '.md': {
       return read_md_file({ file })
+    }
+    case '.json': {
+      return [read_json_file({ file })]
     }
     default:
       throw new Error(`Unsupported file extension: ${ext}`)
@@ -72,6 +78,13 @@ export function write_file(args: {
       let files = infer_dest_files({ file, sheets: args.sheets })
       for (let i = 0; i < files.length; i++) {
         write_md_file({ file: files[i], rows: args.sheets[i].rows })
+      }
+      break
+    }
+    case '.json': {
+      let files = infer_dest_files({ file, sheets: args.sheets })
+      for (let i = 0; i < files.length; i++) {
+        write_json_file({ file: files[i], rows: args.sheets[i].rows })
       }
       break
     }
@@ -355,7 +368,95 @@ function count_char_width(text: string) {
   return width
 }
 
+export function read_json_file(args: {
+  file: string
+  format?: 'array' | 'object'
+}): SheetData<CellValue> {
+  let { file, format } = args
+  let name = infer_sheet_name(file)
+  let text = readFileSync(file, 'utf-8')
+  let json = JSON.parse(text)
+  switch (format) {
+    case 'array': {
+      if (!Array.isArray(json)) {
+        throw new Error('Invalid JSON file, expected array')
+      }
+      for (let item of json) {
+        if (!Array.isArray(item)) {
+          throw new Error('Invalid JSON file, expected array of arrays')
+        }
+      }
+      return { name, rows: json }
+    }
+    case 'object': {
+      if (is_object(json)) {
+        json = [json]
+      }
+      if (!Array.isArray(json)) {
+        throw new Error('Invalid JSON file, expected array of objects')
+      }
+      for (let item of json) {
+        if (!is_object(item)) {
+          throw new Error('Invalid JSON file, expected array of objects')
+        }
+      }
+      let rows = objects_to_rows<CellValue>(json)
+      return { name, rows }
+    }
+    default: {
+      // infer format from data
+
+      if (is_object(json)) {
+        json = [json]
+      }
+
+      if (!Array.isArray(json)) {
+        throw new Error('Invalid JSON file, expected array')
+      }
+
+      for (let item of json) {
+        if (Array.isArray(item)) {
+          return read_json_file({ file, format: 'array' })
+        }
+        if (is_object(item)) {
+          return read_json_file({ file, format: 'object' })
+        }
+        throw new Error(
+          'Invalid JSON file, expected array of objects or arrays',
+        )
+      }
+
+      return { name, rows: [] }
+    }
+  }
+}
+
+export function write_json_file(args: {
+  file: string
+  rows: CellValue[][]
+  format?: 'array' | 'object'
+}) {
+  let { file, rows } = args
+  let values = args.format === 'array' ? rows : rows_to_objects(rows)
+  let text = '['
+  for (let i = 0; i < values.length; i++) {
+    if (i !== 0) {
+      text += ','
+    }
+    text += '\n  ' + JSON.stringify(values[i])
+  }
+  text += '\n]\n'
+  writeFileSync(file, text, 'utf-8')
+}
+
+function is_object(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 export function rows_to_objects<T>(rows: T[][]): Record<string, T>[] {
+  if (rows.length === 0) {
+    return []
+  }
   let objects: Record<string, T>[] = []
   let headers = rows[0]
   for (let i = 1; i < rows.length; i++) {
@@ -372,6 +473,9 @@ export function rows_to_objects<T>(rows: T[][]): Record<string, T>[] {
 export function objects_to_rows<T>(
   objects: Record<string, T>[],
 ): (T | string | null)[][] {
+  if (objects.length === 0) {
+    return []
+  }
   let header_set = new Set<string>()
   for (let object of objects) {
     for (let header of Object.keys(object)) {

@@ -3,14 +3,17 @@ import {
   convert_file,
   read_csv_file,
   read_file,
+  read_json_file,
   read_md_file,
   read_xlsx_file,
   rows_to_objects,
   write_csv_file,
   write_file,
+  write_json_file,
   write_md_file,
   write_xlsx_file,
 } from './core'
+import assert from 'assert'
 
 function test_xlsx_file() {
   let rows = read_xlsx_file({
@@ -70,7 +73,8 @@ function test_convert_2() {
   convert_file({ source_file: 'res/roster.md', dest_file: 'res/roster.csv' })
   convert_file({ source_file: 'res/roster.csv', dest_file: 'res/roster.tsv' })
   convert_file({ source_file: 'res/roster.tsv', dest_file: 'res/roster.xlsx' })
-  convert_file({ source_file: 'res/roster.xlsx', dest_file: 'res/roster-2.md' })
+  convert_file({ source_file: 'res/roster.xlsx', dest_file: 'res/roster.json' })
+  convert_file({ source_file: 'res/roster.json', dest_file: 'res/roster-2.md' })
 }
 
 function test_type_infer() {
@@ -96,12 +100,29 @@ function test_multi_table() {
   return data
 }
 
+function test_json_file() {
+  let rows = read_json_file({ file: 'res/roster.json' }).rows
+  let text = JSON.stringify(rows)
+  write_json_file({ file: 'res/roster-array.json', rows, format: 'array' })
+  write_json_file({ file: 'res/roster-object.json', rows, format: 'object' })
+  assert(
+    text ===
+      JSON.stringify(read_json_file({ file: 'res/roster-array.json' }).rows),
+    'failed to read json array of arrays',
+  )
+  assert(
+    text ===
+      JSON.stringify(read_json_file({ file: 'res/roster-object.json' }).rows),
+    'failed to read json array of objects',
+  )
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
 test_convert_2()
-
 // let data = test_multi_table()
+// test_json_file()
 // console.log(data)
 // debugger
 
