@@ -55,43 +55,37 @@ export function write_file(args: {
   file: string
   sheets: SheetData<CellValue>[]
 }) {
-  let file = args.file
+  let { file, sheets } = args
   let ext = extname(file)
+  let write: (file: string, rows: CellValue[][]) => void
   switch (ext) {
     case '.xlsx': {
-      write_xlsx_file({ file, sheets: args.sheets })
+      write_xlsx_file({ file, sheets })
+      return
+    }
+    case '.csv': {
+      write = (file, rows) => write_csv_file({ file, rows, separator: ',' })
       break
     }
-    case '.csv':
     case '.tsv': {
-      let separator = ext === '.tsv' ? '\t' : ','
-      let files = infer_dest_files({ file, sheets: args.sheets })
-      for (let i = 0; i < files.length; i++) {
-        write_csv_file({
-          file: files[i],
-          rows: args.sheets[i].rows,
-          separator,
-        })
-      }
+      write = (file, rows) => write_csv_file({ file, rows, separator: '\t' })
       break
     }
     case '.md': {
-      let files = infer_dest_files({ file, sheets: args.sheets })
-      for (let i = 0; i < files.length; i++) {
-        write_md_file({ file: files[i], rows: args.sheets[i].rows })
-      }
+      write = (file, rows) => write_md_file({ file, rows })
       break
     }
     case '.json': {
-      let files = infer_dest_files({ file, sheets: args.sheets })
-      for (let i = 0; i < files.length; i++) {
-        write_json_file({ file: files[i], rows: args.sheets[i].rows })
-      }
+      write = (file, rows) => write_json_file({ file, rows })
       break
     }
     default: {
       throw new Error(`Unsupported file extension: ${ext}`)
     }
+  }
+  let files = infer_dest_files({ file, sheets })
+  for (let i = 0; i < files.length; i++) {
+    write(files[i], args.sheets[i].rows)
   }
 }
 
