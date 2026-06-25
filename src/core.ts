@@ -84,9 +84,18 @@ export function write_file(args: {
       throw new Error(`Unsupported file extension: ${ext}`)
     }
   }
+  if (file.startsWith('/dev/stdout')) {
+    file = '/dev/stdout'
+  }
   let files = infer_dest_files({ file, sheets })
+  let show_name = file === '/dev/stdout' && sheets.length > 1
   for (let i = 0; i < files.length; i++) {
-    write(files[i], args.sheets[i].rows)
+    if (show_name) {
+      console.log()
+      console.log(`Table: ${sheets[i].name}`)
+      console.log()
+    }
+    write(files[i], sheets[i].rows)
   }
 }
 

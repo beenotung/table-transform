@@ -1,12 +1,4 @@
-import {
-  CellValue,
-  read_file,
-  write_csv_file,
-  write_file,
-  write_json_file,
-  write_md_file,
-  write_xlsx_file,
-} from './core'
+import { read_file, write_file } from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'xlsx', 'json']
 
@@ -142,47 +134,9 @@ function main() {
     console.error(String(error))
     process.exit(1)
   }
+  let output =
+    args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
   let sheets = read_file({ file: args.input })
-  if (args.output !== '/dev/stdout') {
-    write_file({ file: args.output, sheets })
-    return
-  }
-  let file = '/dev/stdout'
-  let write: (rows: CellValue[][]) => void
-  switch (args.format) {
-    case 'xlsx': {
-      write_xlsx_file({ file, sheets })
-      return
-    }
-    case 'csv': {
-      write = rows => write_csv_file({ file, rows })
-      break
-    }
-    case 'tsv': {
-      write = rows => write_csv_file({ file, rows, separator: '\t' })
-      break
-    }
-    case 'markdown':
-    case 'md': {
-      write = rows => write_md_file({ file, rows })
-      break
-    }
-    case 'json': {
-      write = rows => write_json_file({ file, rows })
-      break
-    }
-    default: {
-      throw new Error(`Unsupported format: ${args.format}`)
-    }
-  }
-  let show_name = sheets.length > 1
-  for (let sheet of sheets) {
-    if (show_name) {
-      console.log()
-      console.log(`Table: ${sheet.name}`)
-      console.log()
-    }
-    write(sheet.rows)
-  }
+  write_file({ file: output, sheets })
 }
 main()
