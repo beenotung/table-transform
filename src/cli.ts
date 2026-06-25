@@ -135,7 +135,13 @@ Examples:
 }
 
 function main() {
-  let args = get_args()
+  let args
+  try {
+    args = get_args()
+  } catch (error) {
+    console.error(String(error))
+    process.exit(1)
+  }
   let sheets = read_file({ file: args.input })
   if (args.output !== '/dev/stdout') {
     write_file({ file: args.output, sheets })
