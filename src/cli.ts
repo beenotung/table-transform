@@ -178,7 +178,9 @@ function main() {
   let show_name = sheets.length > 1
   for (let sheet of sheets) {
     if (show_name) {
-      console.log(`Sheet: ${sheet.name}`)
+      console.log()
+      console.log(`Table: ${sheet.name}`)
+      console.log()
     }
     write(sheet.rows)
   }
