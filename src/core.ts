@@ -1,7 +1,7 @@
 import { readFile, writeFile, utils } from '@e965/xlsx'
 import { to_csv, from_csv } from '@beenotung/tslib/csv'
 import { readFileSync, writeFileSync } from 'fs'
-import { basename, extname } from 'path'
+import { basename, dirname, extname, join } from 'path'
 
 export type SheetData<T extends CellValue> = {
   name: string
@@ -97,10 +97,14 @@ function infer_dest_files(args: {
   if (sheets.length === 1) {
     return [file]
   }
+  if (file === '/dev/stdout') {
+    return new Array(sheets.length).fill('/dev/stdout')
+  }
+  let dir = dirname(file)
   let name = infer_sheet_name(file)
   let ext = extname(file)
-  return sheets.map(
-    sheet => `${sanitize_name(name)}-${sanitize_name(sheet.name)}${ext}`,
+  return sheets.map(sheet =>
+    join(dir, `${sanitize_name(name)}-${sanitize_name(sheet.name)}${ext}`),
   )
 }
 
