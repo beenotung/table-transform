@@ -10,16 +10,16 @@ export type SheetData<T extends CellValue> = {
 
 export type CellValue = string | number | boolean | Date | null
 
-export function read_file(args: { file: `${string}.md` }): SheetData<string>[]
-export function read_file(args: { file: `${string}.csv` }): SheetData<string>[]
-export function read_file(args: { file: `${string}.tsv` }): SheetData<string>[]
 export function read_file(args: {
-  file: `${string}.xlsx`
-}): SheetData<CellValue>[]
+  file:
+    | `${string}.md`
+    | `${string}.markdown`
+    | `${string}.csv`
+    | `${string}.tsv`
+}): SheetData<string>[]
 export function read_file(args: {
-  file: `${string}.json`
+  file: `${string}.xlsx` | `${string}.json` | string
 }): SheetData<CellValue>[]
-export function read_file(args: { file: string }): SheetData<CellValue>[]
 export function read_file(args: { file: string }): SheetData<CellValue>[] {
   let file = args.file
   let ext = extname(file)
@@ -33,6 +33,7 @@ export function read_file(args: { file: string }): SheetData<CellValue>[] {
     case '.tsv': {
       return [read_csv_file({ file, separator: '\t' })]
     }
+    case '.markdown':
     case '.md': {
       return read_md_file({ file })
     }
