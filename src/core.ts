@@ -71,6 +71,7 @@ export function write_file(args: {
       write = (file, rows) => write_csv_file({ file, rows, separator: '\t' })
       break
     }
+    case '.markdown':
     case '.md': {
       write = (file, rows) => write_md_file({ file, rows })
       break
