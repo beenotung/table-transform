@@ -41,6 +41,7 @@ function get_args() {
         }
         break
       }
+      case 'help':
       case '-h':
       case '--help': {
         show_help()
