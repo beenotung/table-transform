@@ -13,6 +13,8 @@ function get_args() {
   let trim_rows = true
   let trim_cols = true
   let separator = ''
+  let input_separator = ''
+  let output_separator = ''
   let json_format: 'object' | 'array' = 'object'
   let show_name: ShowName = 'auto'
   let rest: string[] = []
@@ -55,6 +57,22 @@ function get_args() {
         separator = args[i]
         if (!separator) {
           throw new Error('Missing separator')
+        }
+        break
+      }
+      case '--input-separator': {
+        i++
+        input_separator = args[i]
+        if (!input_separator) {
+          throw new Error('Missing input separator')
+        }
+        break
+      }
+      case '--output-separator': {
+        i++
+        output_separator = args[i]
+        if (!output_separator) {
+          throw new Error('Missing output separator')
         }
         break
       }
@@ -158,13 +176,16 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'markdown'
   }
+  input_separator ||= separator
+  output_separator ||= separator
   return {
     input,
     output,
     trim_string,
     trim_rows,
     trim_cols,
-    separator,
+    input_separator,
+    output_separator,
     json_format,
     format,
     show_name,
@@ -190,7 +211,9 @@ Options to disable trimming (default is enabled):
   --no-trim-cols         Preserve leading/trailing empty columns
 
 Options for csv/txt files:
-  -s, --separator <char>  Example: '|' (default auto detect ',' or '\\t')
+  -s, --separator <char>     Example: '|' (default auto detect ',' or '\\t')
+  --input-separator <char>   Default same as --separator
+  --output-separator <char>  Default same as --separator
 
 Options for json files:
   --array       As 2D array of values
@@ -244,7 +267,7 @@ function main() {
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
   let sheets = read_file({
     file: args.input,
-    separator: args.separator,
+    separator: args.input_separator,
     trim_string: args.trim_string,
     trim_rows: args.trim_rows,
     trim_cols: args.trim_cols,
@@ -253,7 +276,7 @@ function main() {
     file: output,
     sheets,
     show_name: args.show_name,
-    separator: args.separator,
+    separator: args.output_separator,
     json_format: args.json_format,
   })
 }

@@ -199,11 +199,35 @@ export function convert_file(
     dest_file: string
     /** for output json files, default 'object' */
     json_format?: 'object' | 'array'
+    /** default same as separator */
+    input_separator?: string
+    /** default same as separator */
+    output_separator?: string
   } & ExtraReadFileOptions,
 ) {
-  let { source_file, dest_file, json_format, ...rest } = args
-  let sheets = read_file({ ...rest, file: source_file })
-  write_file({ ...rest, file: dest_file, sheets, json_format })
+  let {
+    source_file,
+    dest_file,
+    json_format,
+    input_separator,
+    output_separator,
+    separator,
+    ...rest
+  } = args
+  input_separator ||= separator
+  output_separator ||= separator
+  let sheets = read_file({
+    ...rest,
+    file: source_file,
+    separator: input_separator,
+  })
+  write_file({
+    ...rest,
+    file: dest_file,
+    sheets,
+    json_format,
+    separator: output_separator,
+  })
 }
 
 export type SheetInfo = {
