@@ -86,8 +86,13 @@ export function write_file(args: {
    * for txt files
    */
   separator?: string
+  /**
+   * for json files
+   * @default 'object'
+   */
+  json_format?: 'object' | 'array'
 }) {
-  let { file, sheets } = args
+  let { file, sheets, json_format } = args
   let ext = extname(file)
   let write: (file: string, rows: CellValue[][]) => void
   switch (ext) {
@@ -114,7 +119,8 @@ export function write_file(args: {
       break
     }
     case '.json': {
-      write = (file, rows) => write_json_file({ file, rows })
+      write = (file, rows) =>
+        write_json_file({ file, rows, format: json_format })
       break
     }
     default: {
@@ -191,11 +197,13 @@ export function convert_file(
   args: {
     source_file: string
     dest_file: string
+    /** for output json files, default 'object' */
+    json_format?: 'object' | 'array'
   } & ExtraReadFileOptions,
 ) {
-  let { source_file, dest_file, ...rest } = args
+  let { source_file, dest_file, json_format, ...rest } = args
   let sheets = read_file({ ...rest, file: source_file })
-  write_file({ ...rest, file: dest_file, sheets })
+  write_file({ ...rest, file: dest_file, sheets, json_format })
 }
 
 export type SheetInfo = {

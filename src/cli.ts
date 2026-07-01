@@ -13,6 +13,7 @@ function get_args() {
   let trim_rows = true
   let trim_cols = true
   let separator = ''
+  let json_format: 'object' | 'array' = 'object'
   let show_name: ShowName = 'auto'
   let rest: string[] = []
   for (let i = 0; i < args.length; i++) {
@@ -55,6 +56,14 @@ function get_args() {
         if (!separator) {
           throw new Error('Missing separator')
         }
+        break
+      }
+      case '--array': {
+        json_format = 'array'
+        break
+      }
+      case '--object': {
+        json_format = 'object'
         break
       }
       case '-f':
@@ -156,6 +165,7 @@ function get_args() {
     trim_rows,
     trim_cols,
     separator,
+    json_format,
     format,
     show_name,
   }
@@ -182,6 +192,10 @@ Options to disable trimming (default is enabled):
 Options for csv/txt files:
   -s, --separator <char>  Example: '|' (default auto detect ',' or '\\t')
 
+Options for json files:
+  --array       As 2D array of values
+  --object      As array of key-value objects (default)
+
 Options for console output:
   -f, --format <format>  Output format (default: markdown)
   -n, --name <mode>      Display table name or not (default: auto)
@@ -205,7 +219,7 @@ Examples:
   table-transform source.xlsx export.csv
   table-convert --output export.json source.md
   table-convert export.json --input source.md
-  table-transform --no-trim-string source.xlsx export.json
+  table-transform --no-trim-string source.xlsx export.json --array
 
   # output to console
   table-cli source.xlsx /dev/stdout --format csv
@@ -240,6 +254,7 @@ function main() {
     sheets,
     show_name: args.show_name,
     separator: args.separator,
+    json_format: args.json_format,
   })
 }
 main()
