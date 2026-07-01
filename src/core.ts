@@ -200,7 +200,7 @@ export function read_csv_file(args: {
   file: string
   /** ',' | '\t' */
   separator?: string
-}): SheetData<string> {
+}): SheetData<string> & { separator: string } {
   let file = args.file
   let text = readFileSync(file, 'utf-8')
 
@@ -208,16 +208,22 @@ export function read_csv_file(args: {
   if (!separator && file.endsWith('.tsv')) {
     separator = '\t'
   }
-  if (!separator) {
-    separator = infer_csv_separator(text)
+  let rows: string[][]
+  if (separator) {
+    rows = from_csv(text, separator)
+  } else {
+    let result = infer_csv_separator(text)
+    rows = result.rows
+    separator = result.separator
   }
-
-  let rows = from_csv(text, separator)
   let name = infer_sheet_name(file)
-  return { name, rows }
+  return { name, rows, separator }
 }
 
-export function infer_csv_separator(text: string) {
+export function infer_csv_separator(text: string): {
+  separator: ',' | '\t'
+  rows: string[][]
+} {
   let comma = from_csv(text, ',')
   let tab = from_csv(text, '\t')
 
@@ -231,7 +237,9 @@ export function infer_csv_separator(text: string) {
     tab_count += row.length
   }
 
-  return tab_count > comma_count ? '\t' : ','
+  return tab_count > comma_count
+    ? { separator: '\t', rows: tab }
+    : { separator: ',', rows: comma }
 }
 
 export function read_md_file(args: { file: string }): SheetData<string>[] {
