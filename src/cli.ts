@@ -9,6 +9,7 @@ function get_args() {
   let input = ''
   let output = ''
   let format = ''
+  let separator = ''
   let show_name: ShowName = 'auto'
   let rest: string[] = []
   for (let i = 0; i < args.length; i++) {
@@ -62,6 +63,15 @@ function get_args() {
               throw new Error('Missing show name')
             }
           }
+        }
+        break
+      }
+      case '-s':
+      case '--separator': {
+        i++
+        separator = args[i]
+        if (!separator) {
+          throw new Error('Missing separator')
         }
         break
       }
@@ -124,7 +134,7 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'markdown'
   }
-  return { input, output, format, show_name }
+  return { input, output, format, show_name, separator }
 }
 
 function show_help() {
@@ -139,6 +149,9 @@ Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
   -h, --help             Show help
+
+Options only for csv/txt files:
+  -s, --separator <char>  Example: '|' (default auto detect ',' or '\\t')
 
 Options only for console output:
   -f, --format <format>  Output format (default: markdown)
@@ -185,7 +198,10 @@ function main() {
   }
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
-  let sheets = read_file({ file: args.input })
+  let sheets = read_file({
+    file: args.input,
+    separator: args.separator,
+  })
   write_file({ file: output, sheets, show_name: args.show_name })
 }
 main()

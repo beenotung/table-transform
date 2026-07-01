@@ -16,22 +16,29 @@ export function read_file(args: {
     | `${string}.markdown`
     | `${string}.csv`
     | `${string}.tsv`
+    | `${string}.txt`
+  separator?: string
 }): SheetData<string>[]
 export function read_file(args: {
   file: `${string}.xlsx` | `${string}.json` | string
+  separator?: string
 }): SheetData<CellValue>[]
-export function read_file(args: { file: string }): SheetData<CellValue>[] {
+export function read_file(args: {
+  file: string
+  separator?: string
+}): SheetData<CellValue>[] {
   let file = args.file
   let ext = extname(file)
   switch (ext) {
     case '.xlsx': {
       return read_xlsx_file({ file })
     }
+    case '.txt':
     case '.csv': {
-      return [read_csv_file({ file })]
+      return [read_csv_file({ file, separator: args.separator })]
     }
     case '.tsv': {
-      return [read_csv_file({ file, separator: '\t' })]
+      return [read_csv_file({ file, separator: args.separator || '\t' })]
     }
     case '.markdown':
     case '.md': {
@@ -295,6 +302,7 @@ export function read_csv_file(args: {
     rows = result.rows
     separator = result.separator
   }
+  rows = trim_rows(rows)
   let name = infer_sheet_name(file)
   return { name, rows, separator }
 }
