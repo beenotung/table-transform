@@ -179,10 +179,10 @@ Options to disable trimming (default is enabled):
   --no-trim-rows         Preserve leading/trailing empty rows
   --no-trim-cols         Preserve leading/trailing empty columns
 
-Options only for csv/txt files:
+Options for csv/txt files:
   -s, --separator <char>  Example: '|' (default auto detect ',' or '\\t')
 
-Options only for console output:
+Options for console output:
   -f, --format <format>  Output format (default: markdown)
   -n, --name <mode>      Display table name or not (default: auto)
   --show-name                     Alias for "--name always"
