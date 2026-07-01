@@ -152,7 +152,7 @@ Supported formats:
   - xlsx
   - json
 
-Display table name options:
+Display table name modes:
   auto   : display table name only if there are multiple tables
   always : always display table name
   never  : never display table name
