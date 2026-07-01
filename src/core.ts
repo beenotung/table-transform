@@ -641,10 +641,12 @@ export function read_json_file(
 export function write_json_file(args: {
   file: string
   rows: CellValue[][]
+  /** @default 'object' */
   format?: 'array' | 'object'
 }) {
   let { file, rows } = args
-  let values = args.format === 'array' ? rows : rows_to_objects(rows)
+  let format = args.format || 'object'
+  let values = format === 'object' ? rows_to_objects(rows) : rows
   let text = '['
   for (let i = 0; i < values.length; i++) {
     if (i !== 0) {
