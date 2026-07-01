@@ -117,12 +117,19 @@ function test_json_file() {
   )
 }
 
+function test_xlsx_range() {
+  let file = 'res/with-empty-cells.xlsx'
+  let data = read_xlsx_file({ file })
+  write_json_file({ file: 'test.json', rows: data[0].rows, format: 'array' })
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
 test_convert_2()
 // let data = test_multi_table()
 // test_json_file()
+// test_xlsx_range()
 // console.log(data)
 // debugger
 

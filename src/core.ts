@@ -192,8 +192,87 @@ export function read_xlsx_file(args: {
       }
       rows.push(cols)
     }
+    rows = trim_rows(rows)
     return { name: info.name, rows }
   })
+}
+
+function trim_rows<T extends CellValue>(rows: T[][]): T[][] {
+  if (rows.length === 0) {
+    return rows
+  }
+  let start_row = 0
+  let end_row = rows.length - 1
+  let start_col = 0
+  let end_col = rows[0].length - 1
+
+  for (; end_row >= start_row && end_col >= start_col; ) {
+    // trim tailing row
+    let has_value = false
+    for (let c = start_col; c <= end_col; c++) {
+      let value = rows[end_row][c]
+      if (value !== null && value !== '') {
+        has_value = true
+        break
+      }
+    }
+    if (!has_value) {
+      end_row--
+      continue
+    }
+
+    // trim tailing col
+    has_value = false
+    for (let r = start_row; r <= end_row; r++) {
+      let value = rows[r][end_col]
+      if (value !== null && value !== '') {
+        has_value = true
+        break
+      }
+    }
+    if (!has_value) {
+      end_col--
+      continue
+    }
+
+    // trim leading row
+    has_value = false
+    for (let c = start_col; c <= end_col; c++) {
+      let value = rows[start_row][c]
+      if (value !== null && value !== '') {
+        has_value = true
+        break
+      }
+    }
+    if (!has_value) {
+      start_row++
+      continue
+    }
+
+    // trim leading col
+    has_value = false
+    for (let r = start_row; r <= end_row; r++) {
+      let value = rows[r][start_col]
+      if (value !== null && value !== '') {
+        has_value = true
+        break
+      }
+    }
+    if (!has_value) {
+      start_col++
+      continue
+    }
+
+    break
+  }
+
+  if (end_row < start_row || end_col < start_col) {
+    return []
+  }
+
+  return rows
+    .slice(start_row, end_row + 1)
+    .map(row => row.slice(start_col, end_col + 1))
 }
 
 export function read_csv_file(args: {
