@@ -33,6 +33,15 @@ function get_args() {
         }
         break
       }
+      case '-s':
+      case '--separator': {
+        i++
+        separator = args[i]
+        if (!separator) {
+          throw new Error('Missing separator')
+        }
+        break
+      }
       case '-f':
       case '--format': {
         i++
@@ -63,15 +72,6 @@ function get_args() {
               throw new Error('Missing show name')
             }
           }
-        }
-        break
-      }
-      case '-s':
-      case '--separator': {
-        i++
-        separator = args[i]
-        if (!separator) {
-          throw new Error('Missing separator')
         }
         break
       }
@@ -134,7 +134,7 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'markdown'
   }
-  return { input, output, format, show_name, separator }
+  return { input, output, separator, format, show_name }
 }
 
 function show_help() {
