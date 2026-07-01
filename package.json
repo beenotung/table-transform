@@ -6,6 +6,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "bin": {
+    "table-transform": "bin.js",
+    "table-cli": "bin.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
