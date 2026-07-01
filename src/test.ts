@@ -74,7 +74,16 @@ function test_convert_2() {
   convert_file({ source_file: 'res/roster.csv', dest_file: 'res/roster.tsv' })
   convert_file({ source_file: 'res/roster.tsv', dest_file: 'res/roster.xlsx' })
   convert_file({ source_file: 'res/roster.xlsx', dest_file: 'res/roster.json' })
-  convert_file({ source_file: 'res/roster.json', dest_file: 'res/roster-2.md' })
+  convert_file({
+    source_file: 'res/roster.json',
+    dest_file: 'res/roster.txt',
+    separator: ' | ',
+  })
+  convert_file({
+    source_file: 'res/roster.txt',
+    separator: '|',
+    dest_file: 'res/roster-2.md',
+  })
 }
 
 function test_type_infer() {

@@ -10,42 +10,56 @@ export type SheetData<T extends CellValue> = {
 
 export type CellValue = string | number | boolean | Date | null
 
-export function read_file(args: {
-  file:
-    | `${string}.md`
-    | `${string}.markdown`
-    | `${string}.csv`
-    | `${string}.tsv`
-    | `${string}.txt`
+type ExtraReadFileOptions = {
+  /** for csv/txt, default auto detect ',' or '\t' */
   separator?: string
-}): SheetData<string>[]
-export function read_file(args: {
-  file: `${string}.xlsx` | `${string}.json` | string
-  separator?: string
-}): SheetData<CellValue>[]
-export function read_file(args: {
-  file: string
-  separator?: string
-}): SheetData<CellValue>[] {
+  /** trim string value, default true */
+  trim_string?: boolean
+  /** trim empty leading/trailing rows, default true */
+  trim_rows?: boolean
+  /** trim empty leading/trailing cols, default true */
+  trim_cols?: boolean
+}
+
+export function read_file(
+  args: {
+    file:
+      | `${string}.md`
+      | `${string}.markdown`
+      | `${string}.csv`
+      | `${string}.tsv`
+      | `${string}.txt`
+  } & ExtraReadFileOptions,
+): SheetData<string>[]
+export function read_file(
+  args: {
+    file: `${string}.xlsx` | `${string}.json` | string
+  } & ExtraReadFileOptions,
+): SheetData<CellValue>[]
+export function read_file(
+  args: {
+    file: string
+  } & ExtraReadFileOptions,
+): SheetData<CellValue>[] {
   let file = args.file
   let ext = extname(file)
   switch (ext) {
     case '.xlsx': {
-      return read_xlsx_file({ file })
+      return read_xlsx_file(args)
     }
     case '.txt':
     case '.csv': {
-      return [read_csv_file({ file, separator: args.separator })]
+      return [read_csv_file(args)]
     }
     case '.tsv': {
-      return [read_csv_file({ file, separator: args.separator || '\t' })]
+      return [read_csv_file({ ...args, separator: args.separator || '\t' })]
     }
     case '.markdown':
     case '.md': {
-      return read_md_file({ file })
+      return read_md_file(args)
     }
     case '.json': {
-      return [read_json_file({ file })]
+      return [read_json_file(args)]
     }
     default:
       throw new Error(`Unsupported file extension: ${ext}`)
@@ -68,6 +82,10 @@ export function write_file(args: {
    * @default 'auto'
    */
   show_name?: ShowNameMode
+  /**
+   * for txt files
+   */
+  separator?: string
 }) {
   let { file, sheets } = args
   let ext = extname(file)
@@ -76,6 +94,11 @@ export function write_file(args: {
     case '.xlsx': {
       write_xlsx_file({ file, sheets })
       return
+    }
+    case '.txt': {
+      write = (file, rows) =>
+        write_csv_file({ file, rows, separator: args.separator || ' | ' })
+      break
     }
     case '.csv': {
       write = (file, rows) => write_csv_file({ file, rows, separator: ',' })
@@ -164,9 +187,15 @@ function sanitize_name(name: string): string {
     .trim()
 }
 
-export function convert_file(args: { source_file: string; dest_file: string }) {
-  let sheets = read_file({ file: args.source_file })
-  write_file({ file: args.dest_file, sheets })
+export function convert_file(
+  args: {
+    source_file: string
+    dest_file: string
+  } & ExtraReadFileOptions,
+) {
+  let { source_file, dest_file, ...rest } = args
+  let sheets = read_file({ ...rest, file: source_file })
+  write_file({ ...rest, file: dest_file, sheets })
 }
 
 export type SheetInfo = {
@@ -174,10 +203,12 @@ export type SheetInfo = {
   range?: string
 }
 
-export function read_xlsx_file(args: {
-  file: string
-  sheets?: string[] | SheetInfo[]
-}): SheetData<CellValue>[] {
+export function read_xlsx_file(
+  args: {
+    file: string
+    sheets?: string[] | SheetInfo[]
+  } & ExtraReadFileOptions,
+): SheetData<CellValue>[] {
   let file = args.file
   let workbook = readFile(file)
   let sheets: SheetInfo[] = (args.sheets || workbook.SheetNames).map(item => {
@@ -199,15 +230,41 @@ export function read_xlsx_file(args: {
       }
       rows.push(cols)
     }
-    rows = trim_rows(rows)
+    rows = trim_rows(rows, args)
     return { name: info.name, rows }
   })
 }
 
-function trim_rows<T extends CellValue>(rows: T[][]): T[][] {
+function trim_rows<T extends CellValue>(
+  rows: T[][],
+  args: ExtraReadFileOptions,
+): T[][] {
+  if (args.trim_string ?? true) {
+    rows = trim_string(rows)
+  }
+  if ((args.trim_rows ?? true) || (args.trim_cols ?? true)) {
+    rows = trim_cell(rows, args)
+  }
+  return rows
+}
+
+function trim_string<T extends CellValue>(rows: T[][]): T[][] {
+  return rows.map(cols =>
+    cols.map(value =>
+      typeof value === 'string' ? (value.trim() as T) : value,
+    ),
+  )
+}
+
+function trim_cell<T extends CellValue>(
+  rows: T[][],
+  args: { trim_rows?: boolean; trim_cols?: boolean },
+): T[][] {
   if (rows.length === 0) {
     return rows
   }
+  let trim_rows = args.trim_rows ?? true
+  let trim_cols = args.trim_cols ?? true
   let start_row = 0
   let end_row = rows.length - 1
   let start_col = 0
@@ -216,56 +273,56 @@ function trim_rows<T extends CellValue>(rows: T[][]): T[][] {
   for (; end_row >= start_row && end_col >= start_col; ) {
     // trim tailing row
     let has_value = false
-    for (let c = start_col; c <= end_col; c++) {
+    for (let c = start_col; trim_rows && c <= end_col; c++) {
       let value = rows[end_row][c]
       if (value !== null && value !== '') {
         has_value = true
         break
       }
     }
-    if (!has_value) {
+    if (trim_rows && !has_value) {
       end_row--
       continue
     }
 
     // trim tailing col
     has_value = false
-    for (let r = start_row; r <= end_row; r++) {
+    for (let r = start_row; trim_cols && r <= end_row; r++) {
       let value = rows[r][end_col]
       if (value !== null && value !== '') {
         has_value = true
         break
       }
     }
-    if (!has_value) {
+    if (trim_cols && !has_value) {
       end_col--
       continue
     }
 
     // trim leading row
     has_value = false
-    for (let c = start_col; c <= end_col; c++) {
+    for (let c = start_col; trim_rows && c <= end_col; c++) {
       let value = rows[start_row][c]
       if (value !== null && value !== '') {
         has_value = true
         break
       }
     }
-    if (!has_value) {
+    if (trim_rows && !has_value) {
       start_row++
       continue
     }
 
     // trim leading col
     has_value = false
-    for (let r = start_row; r <= end_row; r++) {
+    for (let r = start_row; trim_cols && r <= end_row; r++) {
       let value = rows[r][start_col]
       if (value !== null && value !== '') {
         has_value = true
         break
       }
     }
-    if (!has_value) {
+    if (trim_cols && !has_value) {
       start_col++
       continue
     }
@@ -282,11 +339,11 @@ function trim_rows<T extends CellValue>(rows: T[][]): T[][] {
     .map(row => row.slice(start_col, end_col + 1))
 }
 
-export function read_csv_file(args: {
-  file: string
-  /** ',' | '\t' */
-  separator?: string
-}): SheetData<string> & { separator: string } {
+export function read_csv_file(
+  args: {
+    file: string
+  } & ExtraReadFileOptions,
+): SheetData<string> & { separator: string } {
   let file = args.file
   let text = readFileSync(file, 'utf-8')
 
@@ -302,7 +359,7 @@ export function read_csv_file(args: {
     rows = result.rows
     separator = result.separator
   }
-  rows = trim_rows(rows)
+  rows = trim_rows(rows, args)
   let name = infer_sheet_name(file)
   return { name, rows, separator }
 }
@@ -329,7 +386,11 @@ export function infer_csv_separator(text: string): {
     : { separator: ',', rows: comma }
 }
 
-export function read_md_file(args: { file: string }): SheetData<string>[] {
+export function read_md_file(
+  args: {
+    file: string
+  } & ExtraReadFileOptions,
+): SheetData<string>[] {
   let file = args.file
   let name = infer_sheet_name(file)
   let text = readFileSync(file, 'utf-8')
@@ -358,6 +419,7 @@ export function read_md_file(args: { file: string }): SheetData<string>[] {
       rows.push(parse_md_line(lines[i]))
     }
     rows.splice(1, 1)
+    rows = trim_rows(rows, args)
     sheets.push({ name: name + `-${sheets.length + 1}`, rows })
     offset = end_index
   }
@@ -414,9 +476,15 @@ export function write_csv_file(args: {
   if (!separator && file.endsWith('.tsv')) {
     separator = '\t'
   }
+  if (!separator && file.endsWith('.txt')) {
+    separator = ' | '
+  }
+  if (!separator) {
+    separator = ','
+  }
   let text = to_csv(
     args.rows.map(row => row.map(value_to_string)),
-    separator || ',',
+    separator,
   )
   writeFileSync(file, text, 'utf-8')
 }
@@ -503,10 +571,12 @@ function count_char_width(text: string) {
   return width
 }
 
-export function read_json_file(args: {
-  file: string
-  format?: 'array' | 'object'
-}): SheetData<CellValue> {
+export function read_json_file(
+  args: {
+    file: string
+    format?: 'array' | 'object'
+  } & ExtraReadFileOptions,
+): SheetData<CellValue> {
   let { file, format } = args
   let name = infer_sheet_name(file)
   let text = readFileSync(file, 'utf-8')
@@ -521,7 +591,8 @@ export function read_json_file(args: {
           throw new Error('Invalid JSON file, expected array of arrays')
         }
       }
-      return { name, rows: json }
+      let rows = trim_rows(json, args)
+      return { name, rows }
     }
     case 'object': {
       if (is_object(json)) {
@@ -536,6 +607,7 @@ export function read_json_file(args: {
         }
       }
       let rows = objects_to_rows<CellValue>(json)
+      rows = trim_rows(rows, args)
       return { name, rows }
     }
     default: {
@@ -551,10 +623,10 @@ export function read_json_file(args: {
 
       for (let item of json) {
         if (Array.isArray(item)) {
-          return read_json_file({ file, format: 'array' })
+          return read_json_file({ ...args, file, format: 'array' })
         }
         if (is_object(item)) {
-          return read_json_file({ file, format: 'object' })
+          return read_json_file({ ...args, file, format: 'object' })
         }
         throw new Error(
           'Invalid JSON file, expected array of objects or arrays',
