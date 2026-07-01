@@ -198,12 +198,12 @@ function show_help() {
 Usage:
   table-transform [options]
 
-Alias: table-cli, table-convert
+Alias: convert-table, extract-table, export-table
 
 Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
-  -h, --help             Show help
+  -h, --help             Show help message
 
 Options to disable trimming (default is enabled):
   --no-trim-string       Preserve leading/trailing whitespace characters in string values
@@ -236,21 +236,23 @@ Display table name modes:
   always : always display table name
   never  : never display table name
 
+When a file contains multiple tables or sheets, output files are split as {basename}-{sheet-name}.{ext}.
+
 Examples:
 
   # convert file format
   table-transform source.xlsx export.csv
-  table-convert --output export.json source.md
-  table-convert export.json --input source.md
+  export-table --output export.json source.md
+  convert-table export.json --input source.md
   table-transform --no-trim-string source.xlsx export.json --array
 
   # output to console
-  table-cli source.xlsx /dev/stdout --format csv
-  table-cli source.xlsx --format csv
-  table-cli source.xlsx - csv
-  table-cli source.xlsx csv
-  table-cli json source.xlsx
-  table-cli source.xlsx
+  extract-table source.xlsx /dev/stdout --format csv
+  extract-table source.xlsx --format csv
+  extract-table source.xlsx - csv
+  extract-table source.xlsx csv
+  extract-table json source.xlsx
+  extract-table source.xlsx
 `.trimStart(),
   )
 }
