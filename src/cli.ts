@@ -9,6 +9,9 @@ function get_args() {
   let input = ''
   let output = ''
   let format = ''
+  let trim_string = true
+  let trim_rows = true
+  let trim_cols = true
   let separator = ''
   let show_name: ShowName = 'auto'
   let rest: string[] = []
@@ -31,6 +34,18 @@ function get_args() {
         if (!output) {
           throw new Error('Missing output file')
         }
+        break
+      }
+      case '--no-trim-string': {
+        trim_string = false
+        break
+      }
+      case '--no-trim-rows': {
+        trim_rows = false
+        break
+      }
+      case '--no-trim-cols': {
+        trim_cols = false
         break
       }
       case '-s':
@@ -134,7 +149,16 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'markdown'
   }
-  return { input, output, separator, format, show_name }
+  return {
+    input,
+    output,
+    trim_string,
+    trim_rows,
+    trim_cols,
+    separator,
+    format,
+    show_name,
+  }
 }
 
 function show_help() {
@@ -149,6 +173,11 @@ Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
   -h, --help             Show help
+
+Options to disable trimming (default is enabled):
+  --no-trim-string       Preserve leading/trailing whitespace characters in string values
+  --no-trim-rows         Preserve leading/trailing empty rows
+  --no-trim-cols         Preserve leading/trailing empty columns
 
 Options only for csv/txt files:
   -s, --separator <char>  Example: '|' (default auto detect ',' or '\\t')
@@ -176,6 +205,7 @@ Examples:
   table-transform source.xlsx export.csv
   table-convert --output export.json source.md
   table-convert export.json --input source.md
+  table-transform --no-trim-string source.xlsx export.json
 
   # output to console
   table-cli source.xlsx /dev/stdout --format csv
@@ -201,7 +231,15 @@ function main() {
   let sheets = read_file({
     file: args.input,
     separator: args.separator,
+    trim_string: args.trim_string,
+    trim_rows: args.trim_rows,
+    trim_cols: args.trim_cols,
   })
-  write_file({ file: output, sheets, show_name: args.show_name })
+  write_file({
+    file: output,
+    sheets,
+    show_name: args.show_name,
+    separator: args.separator,
+  })
 }
 main()
