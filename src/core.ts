@@ -51,9 +51,16 @@ function infer_sheet_name(file: string) {
   return filename.slice(0, -ext.length).trim()
 }
 
+export type ShowNameMode = 'auto' | 'always' | 'never'
+
 export function write_file(args: {
   file: string
   sheets: SheetData<CellValue>[]
+  /**
+   * only used when file is /dev/stdout
+   * @default 'auto'
+   */
+  show_name?: ShowNameMode
 }) {
   let { file, sheets } = args
   let ext = extname(file)
@@ -88,7 +95,11 @@ export function write_file(args: {
     file = '/dev/stdout'
   }
   let files = infer_dest_files({ file, sheets })
-  let show_name = file === '/dev/stdout' && sheets.length > 1
+  let show_name = resolve_show_name({
+    file,
+    show_name: args.show_name || 'auto',
+    files,
+  })
   for (let i = 0; i < files.length; i++) {
     if (show_name) {
       console.log()
@@ -97,6 +108,26 @@ export function write_file(args: {
     }
     write(files[i], sheets[i].rows)
   }
+}
+
+function resolve_show_name(args: {
+  file: string
+  show_name: ShowNameMode
+  files: string[]
+}): boolean {
+  if (args.file !== '/dev/stdout') {
+    return false
+  }
+  if (args.show_name === 'auto') {
+    return args.files.length > 1
+  }
+  if (args.show_name === 'always') {
+    return true
+  }
+  if (args.show_name === 'never') {
+    return false
+  }
+  throw new Error(`Invalid show name mode: ${args.show_name}`)
 }
 
 function infer_dest_files(args: {

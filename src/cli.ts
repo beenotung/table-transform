@@ -2,11 +2,14 @@ import { read_file, write_file } from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'xlsx', 'json']
 
+type ShowName = 'auto' | 'always' | 'never'
+
 function get_args() {
   let args = process.argv.slice(2)
   let input = ''
   let output = ''
   let format = ''
+  let show_name: ShowName = 'auto'
   let rest: string[] = []
   for (let i = 0; i < args.length; i++) {
     let arg = args[i]
@@ -39,6 +42,41 @@ function get_args() {
         if (!formats.includes(format)) {
           throw new Error(`Invalid format: ${format}`)
         }
+        break
+      }
+      case '-n':
+      case '--name': {
+        i++
+        arg = args[i]
+        switch (arg) {
+          case 'auto':
+          case 'always':
+          case 'never': {
+            show_name = arg
+            break
+          }
+          default: {
+            if (arg) {
+              throw new Error(`Invalid table name option: ${arg}`)
+            } else {
+              throw new Error('Missing show name')
+            }
+          }
+        }
+        break
+      }
+      case '--show-name': {
+        show_name = 'always'
+        break
+      }
+      case '--hide-name': {
+        show_name = 'never'
+        break
+      }
+      case 'auto':
+      case 'always':
+      case 'never': {
+        show_name = arg
         break
       }
       case 'help':
@@ -86,7 +124,7 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'markdown'
   }
-  return { input, output, format }
+  return { input, output, format, show_name }
 }
 
 function show_help() {
@@ -100,14 +138,24 @@ Alias: table-cli, table-convert
 Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
-  -f, --format <format>  Output format (only for console output, default: markdown)
   -h, --help             Show help
+
+Options only for console output:
+  -f, --format <format>  Output format (default: markdown)
+  -n, --name <mode>      Display table name or not (default: auto)
+  --show-name                     Alias for "--name always"
+  --hide-name                     Alias for "--name never"
 
 Supported formats:
   - md, markdown
   - csv, tsv
   - xlsx
   - json
+
+Display table name options:
+  auto   : display table name only if there are multiple tables
+  always : always display table name
+  never  : never display table name
 
 Examples:
 
@@ -138,6 +186,6 @@ function main() {
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
   let sheets = read_file({ file: args.input })
-  write_file({ file: output, sheets })
+  write_file({ file: output, sheets, show_name: args.show_name })
 }
 main()
