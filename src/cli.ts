@@ -1,6 +1,6 @@
 import { read_file, write_file } from './core'
 
-let formats = ['md', 'markdown', 'csv', 'tsv', 'xlsx', 'json']
+let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
 
 type ShowName = 'auto' | 'always' | 'never'
 
@@ -227,7 +227,7 @@ Options for console output:
 
 Supported formats:
   - md, markdown
-  - csv, tsv
+  - csv, tsv, txt
   - xlsx
   - json
 
