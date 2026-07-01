@@ -17,7 +17,7 @@ function get_args() {
       case '-i':
       case '--input': {
         i++
-        input = arg
+        input = args[i]
         if (!input) {
           throw new Error('Missing input file')
         }
@@ -26,7 +26,7 @@ function get_args() {
       case '-o':
       case '--output': {
         i++
-        output = arg
+        output = args[i]
         if (!output) {
           throw new Error('Missing output file')
         }
@@ -35,7 +35,7 @@ function get_args() {
       case '-f':
       case '--format': {
         i++
-        format = arg
+        format = args[i]
         if (!format) {
           throw new Error('Missing format')
         }
