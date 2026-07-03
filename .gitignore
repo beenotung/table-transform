@@ -12,3 +12,5 @@ Thumbs.db
 res/*.xlsx
 res/roster*
 !res/roster.md
+res/multi-line.*
+!res/multi-line.csv

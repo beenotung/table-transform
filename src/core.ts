@@ -481,7 +481,13 @@ function parse_md_line(line: string) {
   for (let i = 1; i < line.length; i++) {
     switch (line[i]) {
       case '|': {
-        cells.push(buffer.trim())
+        cells.push(
+          buffer
+            .replaceAll('<br>', '\n')
+            .replaceAll('<br/>', '\n')
+            .replaceAll('<br />', '\n')
+            .trim(),
+        )
         buffer = ''
         break
       }
@@ -514,19 +520,23 @@ export function write_csv_file(args: {
   if (!separator) {
     separator = ','
   }
+  let newline = file.endsWith('.txt') ? '\\n' : '\n'
   let text = to_csv(
-    args.rows.map(row => row.map(value_to_string)),
+    args.rows.map(row => row.map(col => value_to_string(col, newline))),
     separator,
   )
   writeFileSync(file, text, 'utf-8')
 }
 
-function value_to_string(value: CellValue) {
-  if (value instanceof Date) {
-    return value.toISOString()
-  }
+function value_to_string(value: CellValue, line_break: string) {
   if (value === null) {
     return ''
+  }
+  if (typeof value === 'string') {
+    return line_break === '\n' ? value : value.replaceAll('\n', line_break)
+  }
+  if (value instanceof Date) {
+    return value.toISOString()
   }
   return String(value)
 }
@@ -546,7 +556,9 @@ export function write_xlsx_file(args: {
 
 export function write_md_file(args: { file: string; rows: CellValue[][] }) {
   let file = args.file
-  let rows = args.rows.map(cols => cols.map(value_to_string))
+  let rows = args.rows.map(cols =>
+    cols.map(col => value_to_string(col, '<br>')),
+  )
 
   let lengths = rows[0].map(col => col.length)
   for (let r = 1; r < rows.length; r++) {
@@ -571,7 +583,7 @@ export function write_md_file(args: { file: string; rows: CellValue[][] }) {
     text += '|'
     for (let c = 0; c < row.length; c++) {
       let cell_length = lengths[c]
-      let value = value_to_string(row[c])
+      let value = row[c]
       let value_length = count_char_width(value)
       if (value_length < cell_length) {
         value += ' '.repeat(cell_length - value_length)

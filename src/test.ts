@@ -14,6 +14,7 @@ import {
   write_xlsx_file,
 } from './core'
 import assert from 'assert'
+import { readFileSync } from 'fs'
 
 function test_xlsx_file() {
   let rows = read_xlsx_file({
@@ -132,6 +133,29 @@ function test_xlsx_range() {
   write_json_file({ file: 'test.json', rows: data[0].rows, format: 'array' })
 }
 
+function test_newline() {
+  convert_file({
+    source_file: 'res/multi-line.csv',
+    dest_file: 'res/multi-line.md',
+  })
+  let text = readFileSync('res/multi-line.md', 'utf-8')
+  assert(
+    text.includes('this is good<br>Line 2'),
+    'failed to escape newline in md',
+  )
+
+  convert_file({
+    source_file: 'res/multi-line.md',
+    dest_file: 'res/multi-line.json',
+  })
+  text = readFileSync('res/multi-line.json', 'utf-8')
+  let json = JSON.parse(text)
+  assert(
+    json[0].desc === 'this is good\nLine 2',
+    'failed to unescape newline in md',
+  )
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -139,6 +163,7 @@ test_convert_2()
 // let data = test_multi_table()
 // test_json_file()
 // test_xlsx_range()
+test_newline()
 // console.log(data)
 // debugger
 
