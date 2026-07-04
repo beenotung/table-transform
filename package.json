@@ -1,6 +1,6 @@
 {
   "name": "table-transform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "commonjs",
   "description": "Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain text. Includes a CLI and a TypeScript library for reading, writing, and transforming tables.",
   "keywords": [
