@@ -210,7 +210,7 @@ Options to disable trimming (default is enabled):
   --no-trim-rows         Preserve leading/trailing empty rows
   --no-trim-cols         Preserve leading/trailing empty columns
 
-Options for csv/txt files:
+Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\\t')
   --input-separator <char>   Default same as --separator
   --output-separator <char>  Default same as --separator
@@ -227,7 +227,8 @@ Options for console output:
 
 Supported formats:
   - md, markdown
-  - csv, tsv, txt
+  - csv, tsv
+  - txt (ASCII box format from SQLite \`.mode table\`)
   - xlsx
   - json
 

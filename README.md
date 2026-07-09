@@ -8,6 +8,7 @@ Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain t
 
 - Convert between **markdown**, **csv**, **tsv**, **xlsx**, **json**, and **txt**
 - Read multiple markdown tables from one file
+- Read/write **txt** as SQLite `.mode table` ASCII box tables (auto-padded columns)
 - Read multiple Excel sheets, with optional cell range
 - Auto-detect CSV/TSV separator (`,` or `\t`)
 - Trim whitespace, empty rows, and empty columns by default (can be disabled)
@@ -57,7 +58,7 @@ Options to disable trimming (default is enabled):
   --no-trim-rows         Preserve leading/trailing empty rows
   --no-trim-cols         Preserve leading/trailing empty columns
 
-Options for csv/txt files:
+Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\t')
   --input-separator <char>   Default same as --separator
   --output-separator <char>  Default same as --separator
@@ -74,7 +75,8 @@ Options for console output:
 
 Supported formats:
   - md, markdown
-  - csv, tsv, txt
+  - csv, tsv
+  - txt (ASCII box format from SQLite `.mode table`)
   - xlsx
   - json
 
@@ -134,6 +136,17 @@ let sheets = read_md_file({ file: 'res/multi-table.md' })
 // one SheetData per markdown table in the file
 ```
 
+### Read SQLite-style txt tables
+
+`.txt` uses the ASCII box format from SQLite `.mode table`: auto-padded columns, centered headers, right-aligned numbers, left-aligned text. Newlines in cells are escaped as `\n`. Multiple tables in one file are supported on read.
+
+```typescript
+import { read_txt_file } from 'table-transform'
+
+let sheets = read_txt_file({ file: 'res/roster.txt' })
+// one SheetData per table in the file
+```
+
 ### Read Excel with sheet range
 
 ```typescript
@@ -187,7 +200,7 @@ export type SheetInfo = {
 }
 
 type ExtraReadFileOptions = {
-  /** for csv/txt, default auto detect ',' or '\t' */
+  /** for csv/tsv, default auto detect ',' or '\t' */
   separator?: string
   /** trim string value, default true */
   trim_string?: boolean
@@ -221,7 +234,7 @@ export function write_file(args: {
   sheets: SheetData<CellValue>[]
   /** only used when file is /dev/stdout, default 'auto' */
   show_name?: ShowNameMode
-  /** for txt files */
+  /** for csv/tsv files */
   separator?: string
   /** for json files, default 'object' */
   json_format?: 'object' | 'array'
@@ -257,6 +270,8 @@ export function read_md_file(
   args: { file: string } & ExtraReadFileOptions,
 ): SheetData<string>[]
 
+export function read_txt_file(args: { file: string }): SheetData<string>[]
+
 export function read_json_file(
   args: {
     file: string
@@ -276,6 +291,11 @@ export function write_xlsx_file(args: {
 }): void
 
 export function write_md_file(args: { file: string; rows: CellValue[][] }): void
+
+export function write_txt_file(args: {
+  file: string
+  rows: CellValue[][]
+}): void
 
 export function write_json_file(args: {
   file: string
