@@ -47,7 +47,9 @@ export function read_file(
     case '.xlsx': {
       return read_xlsx_file(args)
     }
-    case '.txt':
+    case '.txt': {
+      return read_txt_file(args)
+    }
     case '.csv': {
       return [read_csv_file(args)]
     }
@@ -460,6 +462,46 @@ export function read_md_file(
   return sheets
 }
 
+export function read_txt_file(args: { file: string }): SheetData<string>[] {
+  let file = args.file
+  let name = infer_sheet_name(file)
+  let text = readFileSync(file, 'utf-8')
+  let lines = text.split('\n')
+  let sheets: SheetData<string>[] = []
+  let offset = 0
+  while (offset < lines.length) {
+    let start_index = find_index({
+      lines,
+      offset,
+      predicate: line => line.startsWith('+-'),
+    })
+    if (start_index === -1) {
+      break
+    }
+    let end_index = find_index({
+      lines,
+      offset: start_index + 3,
+      predicate: line => line.startsWith('+-'),
+    })
+    if (end_index === -1) {
+      end_index = lines.length
+    }
+    let rows: string[][] = []
+    // parse headers row
+    rows.push(parse_txt_line(lines[start_index + 1]))
+    // parse value rows
+    for (let i = start_index + 3; i < end_index; i++) {
+      rows.push(parse_txt_line(lines[i]))
+    }
+    sheets.push({ name: name + `-${sheets.length + 1}`, rows })
+    offset = end_index + 1
+  }
+  if (sheets.length === 1) {
+    sheets[0].name = name
+  }
+  return sheets
+}
+
 function find_index(args: {
   lines: string[]
   offset: number
@@ -485,6 +527,36 @@ function parse_md_line(line: string) {
             .replaceAll('<br>', '\n')
             .replaceAll('<br/>', '\n')
             .replaceAll('<br />', '\n')
+            .trim(),
+        )
+        buffer = ''
+        break
+      }
+      case '\\': {
+        i++
+        buffer += line[i] || ''
+        break
+      }
+      default: {
+        buffer += line[i]
+      }
+    }
+  }
+  return cells
+}
+
+function parse_txt_line(line: string) {
+  let cells: string[] = []
+  let buffer = ''
+  for (let i = 1; i < line.length; i++) {
+    switch (line[i]) {
+      case '|': {
+        cells.push(
+          buffer
+            .replaceAll('\\t', '\t')
+            .replaceAll('\\r', '\r')
+            .replaceAll('\\n', '\n')
+            .replaceAll('\\\\', '\\')
             .trim(),
         )
         buffer = ''
