@@ -720,7 +720,7 @@ function infer_col_types(rows: CellValue[][]): ColType[] {
 }
 
 function to_col_type(value: CellValue): ColType {
-  if (value === null) {
+  if (value === null || value === '') {
     return 'null'
   }
   if (typeof value === 'string') {
