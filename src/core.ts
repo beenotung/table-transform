@@ -554,11 +554,10 @@ export function write_xlsx_file(args: {
   writeFile(workbook, file)
 }
 
-export function write_md_file(args: { file: string; rows: CellValue[][] }) {
-  let file = args.file
-  let rows = args.rows.map(cols =>
-    cols.map(col => value_to_string(col, '<br>')),
-  )
+function count_lengths(rows: string[][]): number[] {
+  if (rows.length === 0) {
+    return []
+  }
 
   let lengths = rows[0].map(col => col.length)
   for (let r = 1; r < rows.length; r++) {
@@ -570,6 +569,20 @@ export function write_md_file(args: { file: string; rows: CellValue[][] }) {
       }
     }
   }
+  return lengths
+}
+
+export function write_md_file(args: { file: string; rows: CellValue[][] }) {
+  if (args.rows.length === 0) {
+    return
+  }
+
+  let file = args.file
+  let rows = args.rows.map(cols =>
+    cols.map(col => value_to_string(col, '<br>')),
+  )
+
+  let lengths = count_lengths(rows)
 
   for (let i = 0; i < lengths.length; i++) {
     if (lengths[i] < 3) {
