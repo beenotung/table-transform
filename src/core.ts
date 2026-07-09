@@ -577,7 +577,6 @@ export function write_md_file(args: { file: string; rows: CellValue[][] }) {
     return
   }
 
-  let file = args.file
   let rows = args.rows.map(cols =>
     cols.map(col => value_to_string(col, '<br>')),
   )
@@ -613,7 +612,7 @@ export function write_md_file(args: { file: string; rows: CellValue[][] }) {
       text += '\n'
     }
   }
-  writeFileSync(file, text, 'utf-8')
+  writeFileSync(args.file, text, 'utf-8')
 }
 
 function count_char_width(text: string) {
