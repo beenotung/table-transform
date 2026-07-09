@@ -174,7 +174,7 @@ function get_args() {
     throw new Error('format specified but output is not stdout')
   }
   if (!format && output === '/dev/stdout') {
-    format = 'markdown'
+    format = 'txt'
   }
   input_separator ||= separator
   output_separator ||= separator
