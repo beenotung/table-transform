@@ -1,3 +1,5 @@
+import { readFile, readFileSync } from 'fs'
+import { join } from 'path'
 import { read_file, write_file } from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
@@ -137,6 +139,12 @@ function get_args() {
         show_help()
         process.exit(0)
       }
+      case 'version':
+      case '-v':
+      case '--version': {
+        show_version()
+        process.exit(0)
+      }
       case '-': {
         output = '/dev/stdout'
         break
@@ -192,6 +200,13 @@ function get_args() {
   }
 }
 
+function show_version() {
+  let file = join(__dirname, '..', 'package.json')
+  let text = readFileSync(file, 'utf-8')
+  let pkg = JSON.parse(text)
+  console.log(pkg.version)
+}
+
 function show_help() {
   console.log(
     `
@@ -204,6 +219,7 @@ Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
   -h, --help             Show help message
+  -v, --version          Show version
 
 Options to disable trimming (default is enabled):
   --no-trim-string       Preserve leading/trailing whitespace characters in string values

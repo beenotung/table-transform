@@ -52,6 +52,7 @@ Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
   -h, --help             Show help message
+  -v, --version          Show version
 
 Options to disable trimming (default is enabled):
   --no-trim-string       Preserve leading/trailing whitespace characters in string values
