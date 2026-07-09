@@ -1,0 +1,25 @@
+.mode table
+
+create table product (
+  id integer primary key
+, name text
+, price real
+, note text
+);
+
+insert into product
+(id, name, price, note)
+values
+(1, 'alice', 12.5, 'hi'),
+(100, 'bob', 3.0, null),
+(1000, 'charlie', 1, 'a long text');
+
+select * from product;
+
++------+---------+-------+-------------+
+|  id  |  name   | price |    note     |
++------+---------+-------+-------------+
+|    1 | alice   |  12.5 | hi          |
+|  100 | bob     |   3.0 |             |
+| 1000 | charlie |   1.0 | a long text |
++------+---------+-------+-------------+

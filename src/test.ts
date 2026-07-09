@@ -156,6 +156,20 @@ function test_newline() {
   )
 }
 
+function test_txt_file() {
+  convert_file({
+    source_file: 'res/table.md',
+    dest_file: 'res/table-2.txt',
+  })
+
+  let expected = readFileSync('res/table.txt', 'utf-8').trim()
+  let index = expected.indexOf('+-')
+  expected = expected.slice(index)
+
+  let actual = readFileSync('res/table-2.txt', 'utf-8').trim()
+  assert(actual === expected, 'failed to output txt format')
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -164,6 +178,7 @@ test_convert_2()
 // test_json_file()
 // test_xlsx_range()
 test_newline()
+test_txt_file()
 // console.log(data)
 // debugger
 

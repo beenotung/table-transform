@@ -101,8 +101,7 @@ export function write_file(args: {
       return
     }
     case '.txt': {
-      write = (file, rows) =>
-        write_csv_file({ file, rows, separator: args.separator || ' | ' })
+      write = (file, rows) => write_txt_file({ file, rows })
       break
     }
     case '.csv': {
@@ -612,6 +611,127 @@ export function write_md_file(args: { file: string; rows: CellValue[][] }) {
       text += '\n'
     }
   }
+  writeFileSync(args.file, text, 'utf-8')
+}
+
+type ColType = 'null' | 'int' | 'real' | 'text'
+
+function infer_col_types(rows: CellValue[][]): ColType[] {
+  if (rows.length === 0) {
+    return []
+  }
+
+  let types: ColType[] = []
+  for (let r = 1; r < rows.length; r++) {
+    let row = rows[r]
+    for (let c = 0; c < row.length; c++) {
+      let value = row[c]
+      let type = to_col_type(value)
+      if (types[c] === type) {
+        continue
+      }
+      if (!types[c] || types[c] === 'null') {
+        types[c] = type
+        continue
+      }
+      if (types[c] === 'int' && type === 'real') {
+        types[c] = 'real'
+        continue
+      }
+      if (type === 'text') {
+        types[c] = 'text'
+        continue
+      }
+    }
+  }
+  return types
+}
+
+function to_col_type(value: CellValue): ColType {
+  if (value === null) {
+    return 'null'
+  }
+  if (typeof value === 'string') {
+    let num = +value
+    let str = String(num)
+    if (str === value || str + '.0' === value) {
+      value = num
+    }
+  }
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return 'int'
+    }
+    if (Number.isFinite(value)) {
+      return 'real'
+    }
+    return 'int'
+  }
+  return 'text'
+}
+
+export function write_txt_file(args: { file: string; rows: CellValue[][] }) {
+  let value_rows = args.rows
+  if (value_rows.length === 0) {
+    return
+  }
+
+  let str_rows = value_rows.map(cols =>
+    cols.map(col =>
+      value_to_string(col, '\n')
+        .replaceAll('\\', '\\\\')
+        .replaceAll('\t', '\\t')
+        .replaceAll('\r', '\\r')
+        .replaceAll('\n', '\\n'),
+    ),
+  )
+
+  let lengths = count_lengths(str_rows)
+  let types = infer_col_types(value_rows)
+
+  let text = ''
+
+  let border =
+    '+' + lengths.map(length => '-'.repeat(length + 2)).join('+') + '+'
+
+  text += border + '\n'
+
+  for (let r = 0; r < str_rows.length; r++) {
+    let row = str_rows[r]
+    text += '|'
+    for (let c = 0; c < row.length; c++) {
+      let type = types[c]
+      let align =
+        r === 0
+          ? 'center'
+          : type === 'int' || type === 'real'
+            ? 'left'
+            : 'right'
+      let cell_length = lengths[c]
+      let str = row[c]
+      let str_length = count_char_width(str)
+      let padding = cell_length - str_length
+      if (padding > 0) {
+        if (align === 'center') {
+          let left_padding = Math.floor(padding / 2)
+          let right_padding = padding - left_padding
+          str = ' '.repeat(left_padding) + str + ' '.repeat(right_padding)
+        } else if (align === 'right') {
+          str = str + ' '.repeat(padding)
+        } else if (align === 'left') {
+          str = ' '.repeat(padding) + str
+        }
+      }
+      text += ` ${str} |`
+    }
+    text += '\n'
+    if (r === 0) {
+      text += border + '\n'
+    }
+  }
+
+  text += border + '\n'
+
   writeFileSync(args.file, text, 'utf-8')
 }
 

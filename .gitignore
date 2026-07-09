@@ -14,3 +14,4 @@ res/roster*
 !res/roster.md
 res/multi-line.*
 !res/multi-line.csv
+res/table-2.txt
