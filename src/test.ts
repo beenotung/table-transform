@@ -1,6 +1,7 @@
 import { csv_to_json, from_csv } from '@beenotung/tslib'
 import {
   convert_file,
+  list_sheet_names,
   read_csv_file,
   read_file,
   read_json_file,
@@ -170,6 +171,18 @@ function test_txt_file() {
   assert(actual === expected, 'failed to output txt format')
 }
 
+function test_list_sheet_names() {
+  assert.deepStrictEqual(list_sheet_names('res/multi-table.xlsx'), [
+    'Users',
+    'Posts',
+  ])
+  assert.deepStrictEqual(list_sheet_names('res/multi-table.md'), [
+    'multi-table-1',
+    'multi-table-2',
+  ])
+  assert.deepStrictEqual(list_sheet_names('res/roster.csv'), ['roster'])
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -179,6 +192,7 @@ test_convert_2()
 // test_xlsx_range()
 test_newline()
 test_txt_file()
+test_list_sheet_names()
 // console.log(data)
 // debugger
 

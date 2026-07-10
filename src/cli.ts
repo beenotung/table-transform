@@ -1,6 +1,6 @@
 import { readFile, readFileSync } from 'fs'
 import { join } from 'path'
-import { read_file, write_file } from './core'
+import { list_sheet_names, read_file, write_file } from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
 
@@ -19,10 +19,16 @@ function get_args() {
   let output_separator = ''
   let json_format: 'object' | 'array' = 'object'
   let show_name: ShowName = 'auto'
+  let list = false
   let rest: string[] = []
   for (let i = 0; i < args.length; i++) {
     let arg = args[i]
     switch (arg) {
+      case '-l':
+      case '--list': {
+        list = true
+        break
+      }
       case '-i':
       case '--input': {
         i++
@@ -175,6 +181,18 @@ function get_args() {
   if (!input) {
     throw new Error('Missing input file')
   }
+  if (list) {
+    if (output) {
+      throw new Error('--list cannot be used with an output file')
+    }
+    if (format) {
+      throw new Error('--list cannot be used with --format')
+    }
+    return {
+      input,
+      list: true as const,
+    }
+  }
   if (!output) {
     output = '/dev/stdout'
   }
@@ -197,6 +215,7 @@ function get_args() {
     json_format,
     format,
     show_name,
+    list: false as const,
   }
 }
 
@@ -218,6 +237,7 @@ Alias: convert-table, extract-table, export-table
 Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
+  -l, --list             List sheet/table names
   -h, --help             Show help message
   -v, --version          Show version
 
@@ -257,6 +277,10 @@ When a file contains multiple tables or sheets, output files are split as {basen
 
 Examples:
 
+  # list sheet/table names
+  table-transform --list source.xlsx
+  table-transform multi-table.md -l
+
   # convert file format
   table-transform source.xlsx export.csv
   export-table --output export.json source.md
@@ -281,6 +305,13 @@ function main() {
   } catch (error) {
     console.error(String(error))
     process.exit(1)
+  }
+  if (args.list) {
+    let names = list_sheet_names(args.input)
+    for (let name of names) {
+      console.log(name)
+    }
+    return
   }
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output

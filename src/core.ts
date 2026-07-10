@@ -236,6 +236,28 @@ export type SheetInfo = {
   range?: string
 }
 
+/** List sheet/table names without converting cell data. */
+export function list_sheet_names(file: string): string[] {
+  let ext = extname(file)
+  switch (ext) {
+    case '.xlsx': {
+      // SheetJS: parse sheet names only, skip cell data
+      let workbook = readFile(file, { bookSheets: true })
+      return workbook.SheetNames
+    }
+    case '.csv':
+    case '.tsv':
+    case '.json': {
+      // single sheet named after the file basename
+      return [infer_sheet_name(file)]
+    }
+    default: {
+      // md/txt (and any future multi-table formats via read_file)
+      return read_file({ file }).map(sheet => sheet.name)
+    }
+  }
+}
+
 export function read_xlsx_file(
   args: {
     file: string

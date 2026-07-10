@@ -51,6 +51,7 @@ Alias: convert-table, extract-table, export-table
 Options:
   -i, --input <file>     Input file (path)
   -o, --output <file>    Output file (path or /dev/stdout)
+  -l, --list             List sheet/table names
   -h, --help             Show help message
   -v, --version          Show version
 
@@ -89,7 +90,14 @@ Display table name modes:
 When a file contains multiple tables or sheets, output files are split as {basename}-{sheet-name}.{ext}.
 ```
 
-Run `table-transform --help` for example commands.
+List sheet/table names:
+
+```bash
+table-transform --list source.xlsx
+table-transform multi-table.md -l
+```
+
+Run `table-transform --help` for more example commands.
 
 ## Library Usage Example
 
@@ -127,6 +135,15 @@ write_file({
 ```
 
 `read_file` returns `SheetData<string>[]` for markdown/csv/tsv/txt, and `SheetData<CellValue>[]` for xlsx/json.
+
+### List sheet/table names
+
+```typescript
+import { list_sheet_names } from 'table-transform'
+
+let names = list_sheet_names('res/multi-table.xlsx')
+// ['Users', 'Posts']
+```
 
 ### Read markdown with multiple tables
 
@@ -253,6 +270,8 @@ export function convert_file(
     output_separator?: string
   } & ExtraReadFileOptions,
 ): void
+
+export function list_sheet_names(file: string): string[]
 
 export function read_xlsx_file(
   args: {
