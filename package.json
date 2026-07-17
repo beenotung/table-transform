@@ -30,8 +30,8 @@
     "extract-table": "bin.js",
     "export-table": "bin.js"
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/core.js",
+  "types": "dist/core.d.ts",
   "files": [
     "dist"
   ],
