@@ -9,8 +9,8 @@
     "incremental": true,
     "declaration": true,
     "types": ["node"],
-    "rootDir": "src",
-    "outDir": "dist"
+    "rootDir": "./src",
+    "outDir": "./dist"
   },
   "exclude": [
     "dist",
