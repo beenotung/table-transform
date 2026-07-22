@@ -12,6 +12,7 @@ Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain t
 - Read multiple Excel sheets, with optional cell range
 - Auto-detect CSV/TSV separator (`,` or `\t`)
 - Trim whitespace, empty rows, and empty columns by default (can be disabled)
+- Pick or exclude columns by header name
 - Export JSON as array of objects or 2D array of values
 - TypeScript support with typed return values per format
 
@@ -75,6 +76,14 @@ Options for console output:
   --show-name            Alias for "--name always"
   --hide-name            Alias for "--name never"
 
+Options for column selection (default: all columns; comma-separated or repeat flag):
+  -c, --column <names>   Include columns by header name
+                         Alias: --columns
+                                --field, --fields
+  -x, --exclude <names>  Exclude columns by header name
+                         Alias: --exclude-column, --exclude-columns
+                                --exclude-field, --exclude-fields
+
 Supported formats:
   - md, markdown
   - csv, tsv
@@ -95,6 +104,19 @@ List sheet/table names:
 ```bash
 table-transform --list source.xlsx
 table-transform multi-table.md -l
+```
+
+Pick selected columns by header name (comma-separated or repeat the flag):
+
+```bash
+# pick selected columns (instead of all columns)
+table-transform --column "Name, Tel" source.csv export.csv
+table-transform source.md -c "Name,Tel" export.csv
+table-transform source.csv -c Name -c Tel export.csv
+
+# exclude selected columns (include all other columns)
+table-transform --exclude "Email,CV" source.csv export.csv
+table-transform source.csv -x "Email, CV" export.csv
 ```
 
 Run `table-transform --help` for more example commands.
@@ -118,6 +140,33 @@ convert_file({
   dest_file: 'res/roster.json',
   json_format: 'object', // default
 })
+
+convert_file({
+  source_file: 'res/roster.md',
+  dest_file: 'res/roster-selected.csv',
+  fields: ['No', 'SID', 'Name'],
+})
+```
+
+### Pick selected columns
+
+Match columns by header name. When neither option is set, all columns are kept. Include (`fields`) and exclude (`exclude_fields`) cannot be used together in a single call (logically conflicting).
+
+Use `fields` / `exclude_fields` on `read_file` or `convert_file` (see example above). Use `filter_fields` when you already have `rows` in memory:
+
+```typescript
+import { read_file, filter_fields } from 'table-transform'
+
+let rows_1 = read_file({
+  file: 'res/roster.md',
+  fields: ['No', 'SID', 'Name'],
+})[0].rows
+
+let rows_2 = filter_fields({
+  rows: rows_1,
+  exclude_fields: ['No'],
+})
+// rows_2[0] → ['SID', 'Name']
 ```
 
 ### Read and write
@@ -226,6 +275,10 @@ type ExtraReadFileOptions = {
   trim_rows?: boolean
   /** trim empty leading/trailing cols, default true */
   trim_cols?: boolean
+  /** only include specified fields, exclude all other fields */
+  fields?: string[]
+  /** exclude specified fields, include all other fields */
+  exclude_fields?: string[]
 }
 
 export function read_file(
@@ -330,6 +383,12 @@ export function infer_csv_separator(text: string): {
 }
 
 export function rows_to_objects<T>(rows: T[][]): Record<string, T>[]
+
+export function filter_fields<T extends CellValue>(args: {
+  rows: T[][]
+  fields?: string[]
+  exclude_fields?: string[]
+}): T[][]
 
 export function objects_to_rows<T>(
   objects: Record<string, T>[],

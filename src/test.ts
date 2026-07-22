@@ -183,6 +183,41 @@ function test_list_sheet_names() {
   assert.deepStrictEqual(list_sheet_names('res/roster.csv'), ['roster'])
 }
 
+function test_filter_fields() {
+  let included = read_file({
+    file: 'res/roster.md',
+    fields: ['No', 'SID'],
+  })[0].rows
+  assert.deepStrictEqual(included[0], ['No', 'SID'])
+  assert.deepStrictEqual(included[1], ['1', '21234567'])
+
+  let excluded = read_file({
+    file: 'res/roster.md',
+    exclude_fields: ['Status', 'Eng Name'],
+  })[0].rows
+  assert.deepStrictEqual(excluded[0], ['No', 'Chi Name', 'SID'])
+  assert.deepStrictEqual(excluded[1], ['1', '陳小明', '21234567'])
+
+  convert_file({
+    source_file: 'res/roster.md',
+    dest_file: 'res/roster-selected.csv',
+    fields: ['No', 'SID'],
+  })
+  let csv_rows = read_csv_file({ file: 'res/roster-selected.csv' }).rows
+  assert.deepStrictEqual(csv_rows[0], ['No', 'SID'])
+  assert.deepStrictEqual(csv_rows[1], ['1', '21234567'])
+
+  assert.throws(
+    () =>
+      read_file({
+        file: 'res/roster.md',
+        fields: ['No'],
+        exclude_fields: ['SID'],
+      }),
+    /Cannot filter by both including and excluding fields/,
+  )
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -193,6 +228,7 @@ test_convert_2()
 test_newline()
 test_txt_file()
 test_list_sheet_names()
+test_filter_fields()
 // console.log(data)
 // debugger
 

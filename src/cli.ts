@@ -6,6 +6,24 @@ let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
 
 type ShowName = 'auto' | 'always' | 'never'
 
+function parse_column_names(args: {
+  fields: string[]
+  value: string | undefined
+  label: string
+}): void {
+  let { fields, value, label } = args
+  value = (value || '').trim()
+  if (!value) {
+    throw new Error(`Missing ${label}`)
+  }
+  for (let name of value.split(',')) {
+    name = name.trim()
+    if (name.length > 0) {
+      fields.push(name)
+    }
+  }
+}
+
 function get_args() {
   let args = process.argv.slice(2)
   let input = ''
@@ -20,6 +38,8 @@ function get_args() {
   let json_format: 'object' | 'array' = 'object'
   let show_name: ShowName = 'auto'
   let list = false
+  let fields: string[] = []
+  let exclude_fields: string[] = []
   let rest: string[] = []
   for (let i = 0; i < args.length; i++) {
     let arg = args[i]
@@ -133,6 +153,33 @@ function get_args() {
         show_name = 'never'
         break
       }
+      case '-c':
+      case '--column':
+      case '--columns':
+      case '--field':
+      case '--fields': {
+        i++
+        parse_column_names({
+          fields,
+          value: args[i],
+          label: 'column names to include',
+        })
+        break
+      }
+      case '-x':
+      case '--exclude':
+      case '--exclude-column':
+      case '--exclude-columns':
+      case '--exclude-field':
+      case '--exclude-fields': {
+        i++
+        parse_column_names({
+          fields: exclude_fields,
+          value: args[i],
+          label: 'column names to exclude',
+        })
+        break
+      }
       case 'auto':
       case 'always':
       case 'never': {
@@ -202,6 +249,9 @@ function get_args() {
   if (!format && output === '/dev/stdout') {
     format = 'txt'
   }
+  if (fields.length && exclude_fields.length) {
+    throw new Error('Cannot use both column include and exclude options')
+  }
   input_separator ||= separator
   output_separator ||= separator
   return {
@@ -215,6 +265,8 @@ function get_args() {
     json_format,
     format,
     show_name,
+    fields,
+    exclude_fields,
     list: false as const,
   }
 }
@@ -261,6 +313,14 @@ Options for console output:
   --show-name            Alias for "--name always"
   --hide-name            Alias for "--name never"
 
+Options for column selection (default: all columns; comma-separated or repeat flag):
+  -c, --column <names>   Include columns by header name
+                         Alias: --columns
+                                --field, --fields
+  -x, --exclude <names>  Exclude columns by header name
+                         Alias: --exclude-column, --exclude-columns
+                                --exclude-field, --exclude-fields
+
 Supported formats:
   - md, markdown
   - csv, tsv
@@ -294,6 +354,15 @@ Examples:
   extract-table source.xlsx csv
   extract-table json source.xlsx
   extract-table source.xlsx
+
+  # pick selected columns (instead of all columns)
+  table-transform --column "Name, Tel" source.csv export.csv
+  table-transform source.md -c "Name,Tel" export.csv
+  table-transform source.csv -c Name -c Tel export.csv
+
+  # exclude selected columns (include all other columns)
+  table-transform --exclude "Email,CV" source.csv export.csv
+  table-transform source.csv -x "Email, CV" export.csv
 `.trimStart(),
   )
 }
@@ -321,6 +390,8 @@ function main() {
     trim_string: args.trim_string,
     trim_rows: args.trim_rows,
     trim_cols: args.trim_cols,
+    fields: args.fields,
+    exclude_fields: args.exclude_fields,
   })
   write_file({
     file: output,

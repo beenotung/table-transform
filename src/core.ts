@@ -19,6 +19,10 @@ type ExtraReadFileOptions = {
   trim_rows?: boolean
   /** trim empty leading/trailing cols, default true */
   trim_cols?: boolean
+  /** only include specified fields, exclude all other fields */
+  fields?: string[]
+  /** exclude specified fields, include all other fields */
+  exclude_fields?: string[]
 }
 
 export function read_file(
@@ -43,29 +47,44 @@ export function read_file(
 ): SheetData<CellValue>[] {
   let file = args.file
   let ext = extname(file)
+  let sheets: SheetData<CellValue>[]
   switch (ext) {
     case '.xlsx': {
-      return read_xlsx_file(args)
+      sheets = read_xlsx_file(args)
+      break
     }
     case '.txt': {
-      return read_txt_file(args)
+      sheets = read_txt_file(args)
+      break
     }
     case '.csv': {
-      return [read_csv_file(args)]
+      sheets = [read_csv_file(args)]
+      break
     }
     case '.tsv': {
-      return [read_csv_file({ ...args, separator: args.separator || '\t' })]
+      sheets = [read_csv_file({ ...args, separator: args.separator || '\t' })]
+      break
     }
     case '.markdown':
     case '.md': {
-      return read_md_file(args)
+      sheets = read_md_file(args)
+      break
     }
     case '.json': {
-      return [read_json_file(args)]
+      sheets = [read_json_file(args)]
+      break
     }
     default:
       throw new Error(`Unsupported file extension: ${ext}`)
   }
+  return sheets.map(sheet => ({
+    ...sheet,
+    rows: filter_fields({
+      rows: sheet.rows,
+      fields: args.fields,
+      exclude_fields: args.exclude_fields,
+    }),
+  }))
 }
 
 function infer_sheet_name(file: string) {
@@ -930,6 +949,44 @@ export function write_json_file(args: {
 
 function is_object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function filter_fields<T extends CellValue>(args: {
+  rows: T[][]
+  fields?: string[]
+  exclude_fields?: string[]
+}): T[][] {
+  let { rows, fields, exclude_fields: excluded } = args
+  if (rows.length === 0) {
+    return rows
+  }
+  if (!fields?.length && !excluded?.length) {
+    return rows
+  }
+  if (fields?.length && excluded?.length) {
+    throw new Error('Cannot filter by both including and excluding fields')
+  }
+  let headers = rows[0].map(header => String(header))
+  let indices: number[] = []
+  if (fields?.length) {
+    for (let name of fields) {
+      let index = headers.indexOf(name)
+      if (index === -1) {
+        console.warn(
+          `Skip field: ${JSON.stringify(name)}, not found in headers`,
+        )
+        continue
+      }
+      indices.push(index)
+    }
+  } else {
+    for (let i = 0; i < headers.length; i++) {
+      if (!excluded?.includes(headers[i])) {
+        indices.push(i)
+      }
+    }
+  }
+  return rows.map(row => indices.map(index => row[index]))
 }
 
 export function rows_to_objects<T>(rows: T[][]): Record<string, T>[] {
