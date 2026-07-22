@@ -258,8 +258,8 @@ Options for json files:
 Options for console output:
   -f, --format <format>  Output format (default: markdown)
   -n, --name <mode>      Display table name or not (default: auto)
-  --show-name                     Alias for "--name always"
-  --hide-name                     Alias for "--name never"
+  --show-name            Alias for "--name always"
+  --hide-name            Alias for "--name never"
 
 Supported formats:
   - md, markdown
