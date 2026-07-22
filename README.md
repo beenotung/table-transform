@@ -183,7 +183,7 @@ import { read_csv_file, rows_to_objects } from 'table-transform'
 
 let rows = read_csv_file({ file: 'res/roster.csv' }).rows
 let objects = rows_to_objects(rows)
-// [{ No: '1', 'Chi Name': '陳小明', ... }, ...]
+// [{ No: '1', Name: 'Alice Wong', ... }, ...]
 ```
 
 ### JSON formats
