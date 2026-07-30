@@ -1830,7 +1830,7 @@ export function read_file_async(
       | `${string}.csv`
       | `${string}.tsv`
       | `${string}.txt`
-  } & ExtraReadFileOptions,
+  } & ExtraReadFileOptions & GoogleSheetsOptions,
 ): Promise<SheetData<string>[]>
 export function read_file_async(
   args: {
