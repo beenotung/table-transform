@@ -2,7 +2,7 @@
   "name": "table-transform",
   "version": "1.4.0",
   "type": "commonjs",
-  "description": "Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain text. Includes a CLI and a TypeScript library for reading, writing, and transforming tables.",
+  "description": "Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, plain text, and Google Sheets. Includes a CLI and a TypeScript library for reading, writing, and transforming tables.",
   "keywords": [
     "table",
     "csv",
@@ -12,6 +12,8 @@
     "xlsx",
     "excel",
     "json",
+    "google-sheets",
+    "gsheets",
     "sqlite",
     "convert",
     "transform",
@@ -35,6 +37,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "tsc --noEmit",
     "clean": "rimraf dist",
@@ -51,7 +56,8 @@
   },
   "dependencies": {
     "@beenotung/tslib": "^24.26.0",
-    "@e965/xlsx": "^0.20.3"
+    "@e965/xlsx": "^0.20.3",
+    "google-auth-library": "^10.9.1"
   },
   "repository": {
     "type": "git",
