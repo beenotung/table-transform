@@ -1,6 +1,12 @@
-import { readFile, readFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import { join } from 'path'
-import { list_sheet_names, read_file, write_file } from './core'
+import {
+  list_sheet_names_async,
+  parse_gsheets_ref,
+  read_file_async,
+  resolve_sa_cred_file,
+  write_file_async,
+} from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
 
@@ -38,6 +44,7 @@ function get_args() {
   let json_format: 'object' | 'array' = 'object'
   let show_name: ShowName = 'auto'
   let list = false
+  let sa_cred_file = ''
   let fields: string[] = []
   let exclude_fields: string[] = []
   let rest: string[] = []
@@ -64,6 +71,14 @@ function get_args() {
         output = args[i]
         if (!output) {
           throw new Error('Missing output file')
+        }
+        break
+      }
+      case '--sa-cred-file': {
+        i++
+        sa_cred_file = args[i]
+        if (!sa_cred_file) {
+          throw new Error('Missing service account credential file')
         }
         break
       }
@@ -235,14 +250,17 @@ function get_args() {
     if (format) {
       throw new Error('--list cannot be used with --format')
     }
+    require_sa_cred_file({ files: [input], sa_cred_file })
     return {
       input,
+      sa_cred_file,
       list: true as const,
     }
   }
   if (!output) {
     output = '/dev/stdout'
   }
+  require_sa_cred_file({ files: [input, output], sa_cred_file })
   if (format && output !== '/dev/stdout') {
     throw new Error('format specified but output is not stdout')
   }
@@ -267,7 +285,26 @@ function get_args() {
     show_name,
     fields,
     exclude_fields,
+    sa_cred_file,
     list: false as const,
+  }
+}
+
+/** fail before any network call when a gsheets ref has no credentials */
+function require_sa_cred_file(args: {
+  files: string[]
+  sa_cred_file: string
+}): void {
+  // parsed first, so a malformed reference reports itself instead of the
+  // credentials being blamed for it
+  let has_gsheets = false
+  for (let file of args.files) {
+    if (parse_gsheets_ref(file)) {
+      has_gsheets = true
+    }
+  }
+  if (has_gsheets) {
+    resolve_sa_cred_file({ sa_cred_file: args.sa_cred_file })
   }
 }
 
@@ -298,6 +335,10 @@ Options to disable trimming (default is enabled):
   --no-trim-rows         Preserve leading/trailing empty rows
   --no-trim-cols         Preserve leading/trailing empty columns
 
+Options for Google Sheets:
+  --sa-cred-file <file>      Service account credential json file
+                             (default $GOOGLE_APPLICATION_CREDENTIALS)
+
 Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\\t')
   --input-separator <char>   Default same as --separator
@@ -327,6 +368,11 @@ Supported formats:
   - txt (ASCII box format from SQLite \`.mode table\`)
   - xlsx
   - json
+
+Google Sheets references (use in place of an input/output file):
+  gsheets:<spreadsheet-id>                 All tabs
+  gsheets:<spreadsheet-id>/<sheet-name>    One tab, by name
+  gsheets:<spreadsheet-id>#<sheet-index>   One tab, by zero-based index
 
 Display table name modes:
   auto   : display table name only if there are multiple tables
@@ -363,11 +409,19 @@ Examples:
   # exclude selected columns (include all other columns)
   table-transform --exclude "Email,CV" source.csv export.csv
   table-transform source.csv -x "Email, CV" export.csv
+
+  # google sheets
+  table-transform --list gsheets:1AbC --sa-cred-file service-account.json
+  table-transform gsheets:1AbC/Roster export.csv --sa-cred-file service-account.json
+  table-transform gsheets:1AbC#0 export.json --sa-cred-file service-account.json
+  table-transform source.csv gsheets:1AbC/Roster --sa-cred-file service-account.json
+  export GOOGLE_APPLICATION_CREDENTIALS=service-account.json
+  table-transform gsheets:1AbC export.xlsx
 `.trimStart(),
   )
 }
 
-function main() {
+async function main() {
   let args
   try {
     args = get_args()
@@ -376,7 +430,9 @@ function main() {
     process.exit(1)
   }
   if (args.list) {
-    let names = list_sheet_names(args.input)
+    let names = await list_sheet_names_async(args.input, {
+      sa_cred_file: args.sa_cred_file,
+    })
     for (let name of names) {
       console.log(name)
     }
@@ -384,7 +440,7 @@ function main() {
   }
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
-  let sheets = read_file({
+  let sheets = await read_file_async({
     file: args.input,
     separator: args.input_separator,
     trim_string: args.trim_string,
@@ -392,13 +448,18 @@ function main() {
     trim_cols: args.trim_cols,
     fields: args.fields,
     exclude_fields: args.exclude_fields,
+    sa_cred_file: args.sa_cred_file,
   })
-  write_file({
+  await write_file_async({
     file: output,
     sheets,
     show_name: args.show_name,
     separator: args.output_separator,
     json_format: args.json_format,
+    sa_cred_file: args.sa_cred_file,
   })
 }
-main()
+main().catch(error => {
+  console.error(String(error))
+  process.exit(1)
+})
