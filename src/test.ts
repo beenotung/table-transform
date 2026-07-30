@@ -1,9 +1,14 @@
 import { csv_to_json, from_csv } from '@beenotung/tslib'
 import {
   convert_file,
+  encode_gsheets_column,
+  encode_gsheets_sheet_name,
+  is_gsheets_ref,
   list_sheet_names,
+  parse_gsheets_ref,
   read_csv_file,
   read_file,
+  read_file_async,
   read_json_file,
   read_md_file,
   read_xlsx_file,
@@ -218,6 +223,112 @@ function test_filter_fields() {
   )
 }
 
+/** offline, does not touch the network */
+function test_parse_gsheets_ref() {
+  assert.strictEqual(parse_gsheets_ref('res/roster.csv'), null)
+  assert.strictEqual(is_gsheets_ref('res/roster.csv'), false)
+  assert.strictEqual(is_gsheets_ref('gsheets:1AbC'), true)
+
+  // whole spreadsheet
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC'), {
+    spreadsheet_id: '1AbC',
+  })
+
+  // by name
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Roster'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Roster',
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Sheet 1'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Sheet 1',
+  })
+  // a name is taken verbatim, so digits stay a name and "#" stays in the name
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/2024'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: '2024',
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Q1#draft'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Q1#draft',
+  })
+
+  // by zero-based index
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC#0'), {
+    spreadsheet_id: '1AbC',
+    sheet_index: 0,
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC#12'), {
+    spreadsheet_id: '1AbC',
+    sheet_index: 12,
+  })
+  // "/" after "#" is part of neither, the index must be digits only
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#a/b'),
+    /Invalid Google Sheets sheet index/,
+  )
+
+  assert.throws(() => parse_gsheets_ref('gsheets:'), /Missing.*spreadsheet id/)
+  assert.throws(() => parse_gsheets_ref('gsheets:1AbC/'), /Missing.*sheet name/)
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#-1'),
+    /Invalid Google Sheets sheet index/,
+  )
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#1.5'),
+    /Invalid Google Sheets sheet index/,
+  )
+}
+
+/** A1 notation, where an off-by-one silently writes to the wrong cells */
+function test_encode_gsheets_a1() {
+  assert.strictEqual(encode_gsheets_column(0), 'A')
+  assert.strictEqual(encode_gsheets_column(25), 'Z')
+  // the carry boundaries, A1 letters are not plain base 26
+  assert.strictEqual(encode_gsheets_column(26), 'AA')
+  assert.strictEqual(encode_gsheets_column(51), 'AZ')
+  assert.strictEqual(encode_gsheets_column(52), 'BA')
+  assert.strictEqual(encode_gsheets_column(701), 'ZZ')
+  assert.strictEqual(encode_gsheets_column(702), 'AAA')
+
+  assert.strictEqual(encode_gsheets_sheet_name('Roster'), `'Roster'`)
+  assert.strictEqual(encode_gsheets_sheet_name('Sheet 1'), `'Sheet 1'`)
+  // a quote in the name is doubled, otherwise it ends the quoted name early
+  assert.strictEqual(encode_gsheets_sheet_name(`Sales 'Q1'`), `'Sales ''Q1'''`)
+  assert.strictEqual(encode_gsheets_sheet_name('A/B'), `'A/B'`)
+}
+
+/** the sync API must point callers at the async one instead of failing oddly */
+function test_gsheets_requires_async() {
+  assert.throws(
+    () => read_file({ file: 'gsheets:1AbC/Roster' }),
+    /use read_file_async\(\)/,
+  )
+  assert.throws(
+    () => write_file({ file: 'gsheets:1AbC/Roster', sheets: [] }),
+    /use write_file_async\(\)/,
+  )
+  assert.throws(
+    () => list_sheet_names('gsheets:1AbC'),
+    /use list_sheet_names_async\(\)/,
+  )
+  assert.throws(
+    () =>
+      convert_file({
+        source_file: 'gsheets:1AbC/Roster',
+        dest_file: 'out.csv',
+      }),
+    /use convert_file_async\(\)/,
+  )
+}
+
+/** local files must behave the same through the async wrappers */
+async function test_read_file_async_local() {
+  let sync_rows = read_file({ file: 'res/roster.md' })
+  let async_rows = await read_file_async({ file: 'res/roster.md' })
+  assert.deepStrictEqual(async_rows, sync_rows)
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -229,9 +340,20 @@ test_newline()
 test_txt_file()
 test_list_sheet_names()
 test_filter_fields()
+test_parse_gsheets_ref()
+test_encode_gsheets_a1()
+test_gsheets_requires_async()
 // console.log(data)
 // debugger
 
 // let data = read_md_file({ file: 'res/roster.md' })
 
-console.log('done.')
+test_read_file_async_local().then(
+  () => {
+    console.log('done.')
+  },
+  error => {
+    console.error(error)
+    process.exit(1)
+  },
+)
