@@ -1397,6 +1397,9 @@ export function encode_gsheets_sheet_name(name: string): string {
 
 /** zero-based column index to A1 letters, e.g. 0 -> A, 26 -> AA */
 export function encode_gsheets_column(index: number): string {
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error(`Invalid Google Sheets column index: ${index}`)
+  }
   let name = ''
   for (let i = index + 1; i > 0; i = Math.floor((i - 1) / 26)) {
     name = String.fromCharCode(65 + ((i - 1) % 26)) + name
