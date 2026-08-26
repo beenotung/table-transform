@@ -66,7 +66,6 @@ Options to disable trimming (default is enabled):
 
 Options for Google Sheets:
   --sa-cred-file <file>      Service account credential json file
-                             (default $GOOGLE_APPLICATION_CREDENTIALS)
 
 Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\t')
@@ -156,7 +155,7 @@ A tab name is taken verbatim, so `gsheets:1AbC/2024` means the tab **named** `20
 2. Create a JSON key for that service account and download it.
 3. **Share the spreadsheet with the service account's email address** (the `client_email` in the JSON key), as Editor for writing or Viewer for reading. This step is easy to miss, and skipping it produces a `403` even though the credentials are valid.
 
-Pass the key with `--sa-cred-file`, or set `GOOGLE_APPLICATION_CREDENTIALS` once:
+Pass the key with `--sa-cred-file`:
 
 ```bash
 # list the tab names
@@ -171,10 +170,6 @@ table-transform gsheets:1AbC export.xlsx --sa-cred-file service-account.json
 
 # file -> google sheets (the tab is created when missing)
 table-transform source.csv gsheets:1AbC/Roster --sa-cred-file service-account.json
-
-# or set the credentials once
-export GOOGLE_APPLICATION_CREDENTIALS=service-account.json
-table-transform gsheets:1AbC/Roster export.csv
 ```
 
 Column selection and trimming options work the same as for files.
@@ -264,7 +259,7 @@ import {
   write_file_async,
 } from 'table-transform'
 
-let sa_cred_file = 'service-account.json' // or set GOOGLE_APPLICATION_CREDENTIALS
+let sa_cred_file = 'service-account.json'
 
 let names = await list_sheet_names_async('gsheets:1AbC', { sa_cred_file })
 // ['Users', 'Posts']
@@ -432,10 +427,7 @@ export function list_sheet_names(file: string): string[]
  * Each also accepts an ordinary file path, delegating to the sync function. */
 
 export type GoogleSheetsOptions = {
-  /**
-   * service account credential json file,
-   * default from the GOOGLE_APPLICATION_CREDENTIALS environment variable
-   */
+  /** service account credential json file */
   sa_cred_file?: string
 }
 
@@ -452,7 +444,7 @@ export function is_gsheets_ref(file: string): boolean
 /** returns null when the given string is an ordinary file path */
 export function parse_gsheets_ref(file: string): GoogleSheetsRef | null
 
-/** throws when neither the option nor the environment variable is set */
+/** throws when the credential file is missing or not set */
 export function resolve_sa_cred_file(options?: GoogleSheetsOptions): string
 
 /** quote a tab name for A1 notation, e.g. `Sales 'Q1'` -> `'Sales ''Q1'''` */

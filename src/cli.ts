@@ -337,7 +337,6 @@ Options to disable trimming (default is enabled):
 
 Options for Google Sheets:
   --sa-cred-file <file>      Service account credential json file
-                             (default $GOOGLE_APPLICATION_CREDENTIALS)
 
 Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\\t')
@@ -415,8 +414,6 @@ Examples:
   table-transform gsheets:1AbC/Roster export.csv --sa-cred-file service-account.json
   table-transform gsheets:1AbC#0 export.json --sa-cred-file service-account.json
   table-transform source.csv gsheets:1AbC/Roster --sa-cred-file service-account.json
-  export GOOGLE_APPLICATION_CREDENTIALS=service-account.json
-  table-transform gsheets:1AbC export.xlsx
 `.trimStart(),
   )
 }

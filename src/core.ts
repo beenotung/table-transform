@@ -1085,10 +1085,7 @@ export type GoogleSheetsRef = {
 }
 
 export type GoogleSheetsOptions = {
-  /**
-   * service account credential json file,
-   * default from the GOOGLE_APPLICATION_CREDENTIALS environment variable
-   */
+  /** service account credential json file */
   sa_cred_file?: string
 }
 
@@ -1206,26 +1203,18 @@ async function with_gsheets_retry<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Resolve the service account credential file from the options or the
- * GOOGLE_APPLICATION_CREDENTIALS environment variable.
- *
- * Exported so a caller can fail before any network call is made.
+ * Resolve the service account credential file, checking it here so a wrong
+ * path is reported before any network call, where it would be a bare ENOENT.
  */
 export function resolve_sa_cred_file(
   options: GoogleSheetsOptions = {},
 ): string {
-  let key_file =
-    options.sa_cred_file || process.env.GOOGLE_APPLICATION_CREDENTIALS
+  let key_file = options.sa_cred_file
   if (!key_file) {
     throw new Error(
-      'Missing Google service account credential file, use --sa-cred-file <file> or set GOOGLE_APPLICATION_CREDENTIALS',
+      'Missing Google service account credential file, use --sa-cred-file <file>',
     )
   }
-  /*
-   * Checked here so a wrong path is reported as such, before any network call.
-   * The auth client only opens the file on the first request, where the same
-   * mistake surfaces as a bare ENOENT.
-   */
   if (!existsSync(key_file)) {
     throw new Error(
       `Google service account credential file not found: ${key_file}`,
