@@ -2,7 +2,7 @@ import { readFile, writeFile, utils } from '@e965/xlsx'
 import { to_csv, from_csv } from '@beenotung/tslib/csv'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { basename, dirname, extname, join } from 'path'
-// type-only, the module itself is loaded on demand, see create_gsheets_client()
+// type-only, the module itself is loaded on demand, see open_gsheets()
 import type { sheets_v4 } from '@googleapis/sheets'
 
 export type SheetData<T extends CellValue> = {
@@ -80,14 +80,7 @@ export function read_file(
     default:
       throw new Error(`Unsupported file extension: ${ext}`)
   }
-  return sheets.map(sheet => ({
-    ...sheet,
-    rows: filter_fields({
-      rows: sheet.rows,
-      fields: args.fields,
-      exclude_fields: args.exclude_fields,
-    }),
-  }))
+  return filter_sheets_fields(sheets, args)
 }
 
 function infer_sheet_name(file: string) {
@@ -958,6 +951,21 @@ function is_object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** apply the field options to every sheet, the last step of every read */
+function filter_sheets_fields<T extends CellValue>(
+  sheets: SheetData<T>[],
+  args: ExtraReadFileOptions,
+): SheetData<T>[] {
+  return sheets.map(sheet => ({
+    ...sheet,
+    rows: filter_fields({
+      rows: sheet.rows,
+      fields: args.fields,
+      exclude_fields: args.exclude_fields,
+    }),
+  }))
+}
+
 export function filter_fields<T extends CellValue>(args: {
   rows: T[][]
   fields?: string[]
@@ -1141,16 +1149,16 @@ export function resolve_sa_cred_file(
   return key_file
 }
 
-type GoogleSheetsClient = sheets_v4.Sheets
-
 /** a tab, by its stable numeric id (needed to resize it) and its name */
 type GoogleSheetsGrid = { id: number; name: string }
 
-function to_gsheets_grid(properties: any): GoogleSheetsGrid {
-  let name = String(properties?.title ?? '')
+function to_gsheets_grid(
+  properties?: sheets_v4.Schema$SheetProperties | null,
+): GoogleSheetsGrid {
+  let name = properties?.title || ''
   let id = properties?.sheetId
   // not defaulted, 0 is a real tab id and a resize would hit the wrong tab
-  if (typeof id !== 'number' || !Number.isInteger(id)) {
+  if (typeof id !== 'number') {
     throw new Error(
       `Missing Google Sheets tab id in the API response for tab: ${name}`,
     )
@@ -1186,7 +1194,7 @@ async function open_gsheets(args: {
   // loaded on demand so non-gsheets usage never pays for it
   let { sheets, auth } = await import('@googleapis/sheets')
   let scope = 'https://www.googleapis.com/auth/spreadsheets'
-  let client: GoogleSheetsClient = sheets({
+  let client = sheets({
     version: 'v4',
     auth: new auth.GoogleAuth({
       keyFile: key_file,
@@ -1200,7 +1208,7 @@ async function open_gsheets(args: {
     }),
   )
   let grids = (data.sheets || []).map(sheet =>
-    to_gsheets_grid(sheet?.properties),
+    to_gsheets_grid(sheet.properties),
   )
   return { spreadsheet_id, client, grids }
 }
@@ -1292,7 +1300,6 @@ export async function read_gsheets_file(
         spreadsheetId: spreadsheet_id,
         // an unqualified tab name covers the whole tab
         range: encode_gsheets_sheet_name(grid.name),
-        majorDimension: 'ROWS',
         valueRenderOption: 'UNFORMATTED_VALUE',
         dateTimeRenderOption: 'FORMATTED_STRING',
       }),
@@ -1302,20 +1309,13 @@ export async function read_gsheets_file(
     )
     // padded so the trim and field helpers can index every column
     squarize_rows(rows, null)
-    sheets.push({
-      name: grid.name,
-      rows: filter_fields({
-        rows: trim_rows(rows, args),
-        fields: args.fields,
-        exclude_fields: args.exclude_fields,
-      }),
-    })
+    sheets.push({ name: grid.name, rows: trim_rows(rows, args) })
   }
-  return sheets
+  return filter_sheets_fields(sheets, args)
 }
 
 async function ensure_gsheets_grid(args: {
-  client: GoogleSheetsClient
+  client: sheets_v4.Sheets
   spreadsheet_id: string
   grids: GoogleSheetsGrid[]
   name: string
@@ -1343,7 +1343,7 @@ async function ensure_gsheets_grid(args: {
 }
 
 async function write_gsheets_grid(args: {
-  client: GoogleSheetsClient
+  client: sheets_v4.Sheets
   spreadsheet_id: string
   grid: GoogleSheetsGrid
   rows: CellValue[][]
@@ -1389,7 +1389,7 @@ async function write_gsheets_grid(args: {
       spreadsheetId: spreadsheet_id,
       range,
       valueInputOption: 'RAW',
-      requestBody: { range, majorDimension: 'ROWS', values },
+      requestBody: { values },
     }),
   )
 }
