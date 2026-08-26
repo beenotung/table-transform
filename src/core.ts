@@ -1152,6 +1152,13 @@ export function resolve_sa_cred_file(
 /** a tab, by its stable numeric id (needed to resize it) and its name */
 type GoogleSheetsGrid = { id: number; name: string }
 
+/** an authenticated spreadsheet, and the tabs it had when it was opened */
+type GoogleSheetsSession = {
+  spreadsheet_id: string
+  client: sheets_v4.Sheets
+  grids: GoogleSheetsGrid[]
+}
+
 function to_gsheets_grid(
   properties?: sheets_v4.Schema$SheetProperties | null,
 ): GoogleSheetsGrid {
@@ -1188,7 +1195,7 @@ async function open_gsheets(args: {
   ref: GoogleSheetsRef
   options: GoogleSheetsOptions
   readonly: boolean
-}) {
+}): Promise<GoogleSheetsSession> {
   let spreadsheet_id = args.ref.spreadsheet_id
   let key_file = resolve_sa_cred_file(args.options)
   // loaded on demand so non-gsheets usage never pays for it
@@ -1211,6 +1218,20 @@ async function open_gsheets(args: {
     to_gsheets_grid(sheet.properties),
   )
   return { spreadsheet_id, client, grids }
+}
+
+/** send a single spreadsheet-level request, e.g. adding or resizing a tab */
+function gsheets_batch_update(
+  session: GoogleSheetsSession,
+  operation: string,
+  request: sheets_v4.Schema$Request,
+) {
+  return gsheets_call(operation, () =>
+    session.client.spreadsheets.batchUpdate({
+      spreadsheetId: session.spreadsheet_id,
+      requestBody: { requests: [request] },
+    }),
+  )
 }
 
 /** the tabs the reference selects, or every tab when it has no selector */
@@ -1314,41 +1335,33 @@ export async function read_gsheets_file(
   return filter_sheets_fields(sheets, args)
 }
 
-async function ensure_gsheets_grid(args: {
-  client: sheets_v4.Sheets
-  spreadsheet_id: string
-  grids: GoogleSheetsGrid[]
-  name: string
-}): Promise<GoogleSheetsGrid> {
-  let { client, spreadsheet_id, grids, name } = args
-  let existing = grids.find(grid => grid.name === name)
+/** the tab with this name, created when the spreadsheet has no such tab */
+async function ensure_gsheets_grid(
+  session: GoogleSheetsSession,
+  name: string,
+): Promise<GoogleSheetsGrid> {
+  let existing = session.grids.find(grid => grid.name === name)
   if (existing) {
     return existing
   }
-  let data = await gsheets_call(`create the tab: ${name}`, () =>
-    client.spreadsheets.batchUpdate({
-      spreadsheetId: spreadsheet_id,
-      requestBody: {
-        requests: [{ addSheet: { properties: { title: name } } }],
-      },
-    }),
-  )
+  let data = await gsheets_batch_update(session, `create the tab: ${name}`, {
+    addSheet: { properties: { title: name } },
+  })
   let properties = data.replies?.[0]?.addSheet?.properties
   if (!properties) {
     throw new Error(`Failed to create Google Sheets tab: ${name}`)
   }
   let grid = to_gsheets_grid(properties)
-  grids.push(grid)
+  session.grids.push(grid)
   return grid
 }
 
-async function write_gsheets_grid(args: {
-  client: sheets_v4.Sheets
-  spreadsheet_id: string
-  grid: GoogleSheetsGrid
-  rows: CellValue[][]
-}): Promise<void> {
-  let { client, spreadsheet_id, grid, rows } = args
+/** replace the content of a tab, leaving no cell of the old content behind */
+async function write_gsheets_grid(
+  session: GoogleSheetsSession,
+  grid: GoogleSheetsGrid,
+  rows: CellValue[][],
+): Promise<void> {
   // short rows are padded, otherwise their trailing cells keep the old values
   let values = rows.map(row => row.map(to_gsheets_value))
   let width = squarize_rows<string | number | boolean>(values, '')
@@ -1364,29 +1377,22 @@ async function write_gsheets_grid(args: {
    * grows the grid when the new rows do not fit, something values.update
    * cannot do: it rejects a range past the current grid limits.
    */
-  let grid_properties = { rowCount: height, columnCount: width }
-  await gsheets_call(`resize the tab: ${grid.name}`, () =>
-    client.spreadsheets.batchUpdate({
-      spreadsheetId: spreadsheet_id,
-      requestBody: {
-        requests: [
-          {
-            updateSheetProperties: {
-              properties: { sheetId: grid.id, gridProperties: grid_properties },
-              fields: 'gridProperties.rowCount,gridProperties.columnCount',
-            },
-          },
-        ],
+  await gsheets_batch_update(session, `resize the tab: ${grid.name}`, {
+    updateSheetProperties: {
+      properties: {
+        sheetId: grid.id,
+        gridProperties: { rowCount: height, columnCount: width },
       },
-    }),
-  )
+      fields: 'gridProperties.rowCount,gridProperties.columnCount',
+    },
+  })
 
   // A1 column letters are the same in Sheets and xlsx, so reuse the encoder
   let sheet_name = encode_gsheets_sheet_name(grid.name)
   let range = `${sheet_name}!A1:${utils.encode_col(width - 1)}${height}`
   await gsheets_call(`write the range: ${range}`, () =>
-    client.spreadsheets.values.update({
-      spreadsheetId: spreadsheet_id,
+    session.client.spreadsheets.values.update({
+      spreadsheetId: session.spreadsheet_id,
       range,
       valueInputOption: 'RAW',
       requestBody: { values },
@@ -1410,16 +1416,12 @@ export async function write_gsheets_file(
   if (sheets.length === 0) {
     return
   }
-  let { spreadsheet_id, client, grids } = await open_gsheets({
-    ref,
-    options: args,
-    readonly: false,
-  })
+  let session = await open_gsheets({ ref, options: args, readonly: false })
 
   let names: string[]
   if (ref.sheet_index !== undefined) {
     // an index cannot name a new tab, so it must already exist
-    names = resolve_gsheets_grids(grids, ref).map(grid => grid.name)
+    names = resolve_gsheets_grids(session.grids, ref).map(grid => grid.name)
   } else if (ref.sheet_name !== undefined) {
     names = [ref.sheet_name]
   } else {
@@ -1427,7 +1429,7 @@ export async function write_gsheets_file(
   }
   if (names.length < sheets.length) {
     throw new Error(
-      `Cannot write ${sheets.length} tables into a single Google Sheets tab, use gsheets:${spreadsheet_id} to write each table to its own tab`,
+      `Cannot write ${sheets.length} tables into a single Google Sheets tab, use gsheets:${ref.spreadsheet_id} to write each table to its own tab`,
     )
   }
   // two tables cannot share a tab, the second would overwrite the first
@@ -1439,17 +1441,7 @@ export async function write_gsheets_file(
   }
 
   for (let i = 0; i < sheets.length; i++) {
-    let grid = await ensure_gsheets_grid({
-      client,
-      spreadsheet_id,
-      grids,
-      name: names[i],
-    })
-    await write_gsheets_grid({
-      client,
-      spreadsheet_id,
-      grid,
-      rows: sheets[i].rows,
-    })
+    let grid = await ensure_gsheets_grid(session, names[i])
+    await write_gsheets_grid(session, grid, sheets[i].rows)
   }
 }
