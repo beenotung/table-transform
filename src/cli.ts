@@ -417,6 +417,10 @@ Examples:
   )
 }
 
+// set once a `gsheets:` reference is in play, so only those failures are
+// reported as a bare message, a local file error keeps its stack trace
+let used_gsheets = false
+
 async function main() {
   let args
   try {
@@ -425,6 +429,7 @@ async function main() {
     console.error(String(error))
     process.exit(1)
   }
+  used_gsheets = is_gsheets_ref(args.input)
   if (args.list) {
     let names = is_gsheets_ref(args.input)
       ? await list_gsheets_names({
@@ -439,6 +444,7 @@ async function main() {
   }
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
+  used_gsheets ||= is_gsheets_ref(output)
   let read_options = {
     file: args.input,
     separator: args.input_separator,
@@ -471,6 +477,7 @@ async function main() {
   }
 }
 main().catch(error => {
-  console.error(String(error))
+  // a network or credential failure has no useful stack, a local file one does
+  console.error(used_gsheets ? String(error) : error)
   process.exit(1)
 })
