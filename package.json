@@ -57,7 +57,7 @@
   "dependencies": {
     "@beenotung/tslib": "^24.26.0",
     "@e965/xlsx": "^0.20.3",
-    "google-auth-library": "^10.9.1"
+    "@googleapis/sheets": "^14.0.0"
   },
   "repository": {
     "type": "git",
