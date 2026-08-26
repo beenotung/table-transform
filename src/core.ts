@@ -1056,8 +1056,6 @@ export function objects_to_rows<T>(
  * functions for ordinary file paths, so existing behaviour is unchanged.
  */
 
-const GSHEETS_PREFIX = 'gsheets:'
-
 const GSHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const GSHEETS_READONLY_SCOPE =
@@ -1095,7 +1093,7 @@ export type GoogleSheetsOptions = {
 }
 
 export function is_gsheets_ref(file: string): boolean {
-  return file.startsWith(GSHEETS_PREFIX)
+  return file.startsWith('gsheets:')
 }
 
 function require_local_file(file: string, async_fn: string): void {
@@ -1107,51 +1105,34 @@ function require_local_file(file: string, async_fn: string): void {
 }
 
 /**
- * Parse a `gsheets:` reference, or return null when the given string is an
- * ordinary file path.
- *
- * The tab selector is whichever of "/" or "#" appears first, so a tab name is
- * free to contain "#" (e.g. `gsheets:<id>/Q1#draft`).
+ * Parse a `gsheets:` reference, or return null for an ordinary file path. The
+ * id ends at the first "/" or "#", so a tab name may contain "#".
  */
 export function parse_gsheets_ref(file: string): GoogleSheetsRef | null {
   if (!is_gsheets_ref(file)) {
     return null
   }
-  let value = file.slice(GSHEETS_PREFIX.length)
-  let slash = value.indexOf('/')
-  let hash = value.indexOf('#')
-  let separator =
-    slash === -1 ? hash : hash === -1 ? slash : Math.min(slash, hash)
-
-  let spreadsheet_id = (
-    separator === -1 ? value : value.slice(0, separator)
-  ).trim()
+  let [, id, separator, selector] = /^gsheets:([^/#]*)(?:([/#])(.*))?$/s.exec(
+    file,
+  )!
+  let spreadsheet_id = id.trim()
   if (!spreadsheet_id) {
     throw new Error('Missing Google Sheets spreadsheet id')
   }
-
-  if (separator === -1) {
+  if (!separator) {
     return { spreadsheet_id }
   }
-
-  if (separator === slash) {
-    let sheet_name = value.slice(slash + 1).trim()
-    if (!sheet_name) {
+  selector = selector.trim()
+  if (separator === '/') {
+    if (!selector) {
       throw new Error('Missing Google Sheets sheet name after "/"')
     }
-    return { spreadsheet_id, sheet_name }
+    return { spreadsheet_id, sheet_name: selector }
   }
-
-  let index_text = value.slice(hash + 1).trim()
-  if (!/^\d+$/.test(index_text)) {
+  let sheet_index = +selector
+  if (!/^\d+$/.test(selector) || !Number.isSafeInteger(sheet_index)) {
     throw new Error(
       'Invalid Google Sheets sheet index after "#", expected a zero-based non-negative integer',
-    )
-  }
-  let sheet_index = +index_text
-  if (!Number.isSafeInteger(sheet_index)) {
-    throw new Error(
-      'Google Sheets sheet index is out of the safe integer range',
     )
   }
   return { spreadsheet_id, sheet_index }
