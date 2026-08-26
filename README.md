@@ -458,9 +458,6 @@ export function resolve_sa_cred_file(options?: GoogleSheetsOptions): string
 /** quote a tab name for A1 notation, e.g. `Sales 'Q1'` -> `'Sales ''Q1'''` */
 export function encode_gsheets_sheet_name(name: string): string
 
-/** zero-based column index to A1 letters, e.g. 0 -> A, 26 -> AA */
-export function encode_gsheets_column(index: number): string
-
 export function list_sheet_names_async(
   file: string,
   options?: GoogleSheetsOptions,

@@ -1,7 +1,6 @@
 import { csv_to_json, from_csv } from '@beenotung/tslib'
 import {
   convert_file,
-  encode_gsheets_column,
   encode_gsheets_sheet_name,
   is_gsheets_ref,
   list_sheet_names,
@@ -282,15 +281,6 @@ function test_parse_gsheets_ref() {
 
 /** A1 notation, where an off-by-one silently writes to the wrong cells */
 function test_encode_gsheets_a1() {
-  assert.strictEqual(encode_gsheets_column(0), 'A')
-  assert.strictEqual(encode_gsheets_column(25), 'Z')
-  // the carry boundaries, A1 letters are not plain base 26
-  assert.strictEqual(encode_gsheets_column(26), 'AA')
-  assert.strictEqual(encode_gsheets_column(51), 'AZ')
-  assert.strictEqual(encode_gsheets_column(52), 'BA')
-  assert.strictEqual(encode_gsheets_column(701), 'ZZ')
-  assert.strictEqual(encode_gsheets_column(702), 'AAA')
-
   assert.strictEqual(encode_gsheets_sheet_name('Roster'), `'Roster'`)
   assert.strictEqual(encode_gsheets_sheet_name('Sheet 1'), `'Sheet 1'`)
   // a quote in the name is doubled, otherwise it ends the quoted name early

@@ -1376,18 +1376,6 @@ export function encode_gsheets_sheet_name(name: string): string {
   return `'${name.replaceAll("'", "''")}'`
 }
 
-/** zero-based column index to A1 letters, e.g. 0 -> A, 26 -> AA */
-export function encode_gsheets_column(index: number): string {
-  if (!Number.isInteger(index) || index < 0) {
-    throw new Error(`Invalid Google Sheets column index: ${index}`)
-  }
-  let name = ''
-  for (let i = index + 1; i > 0; i = Math.floor((i - 1) / 26)) {
-    name = String.fromCharCode(65 + ((i - 1) % 26)) + name
-  }
-  return name
-}
-
 function normalize_gsheets_value(value: unknown): CellValue {
   if (value === null || value === undefined) {
     return null
@@ -1430,7 +1418,7 @@ async function read_gsheets_grid(args: {
     Math.floor(GSHEETS_READ_CHUNK_CELLS / grid.column_count),
   )
   let sheet_name = encode_gsheets_sheet_name(grid.name)
-  let last_column = encode_gsheets_column(grid.column_count - 1)
+  let last_column = utils.encode_col(grid.column_count - 1)
   let rows: CellValue[][] = []
 
   /*
@@ -1671,7 +1659,8 @@ async function write_gsheets_grid(args: {
     column_count: Math.max(width, grid.column_count),
   })
 
-  let last_column = encode_gsheets_column(width - 1)
+  // A1 column letters are the same in Sheets and xlsx, so reuse the encoder
+  let last_column = utils.encode_col(width - 1)
   for (let start = 0; start < height; ) {
     let values: (string | number | boolean)[][] = []
     let bytes = 0
