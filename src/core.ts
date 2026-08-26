@@ -48,7 +48,7 @@ export function read_file(
   } & ExtraReadFileOptions,
 ): SheetData<CellValue>[] {
   let file = args.file
-  require_local_file(file, 'read_file_async')
+  require_local_file(file, 'read_gsheets_file')
   let ext = extname(file)
   let sheets: SheetData<CellValue>[]
   switch (ext) {
@@ -117,7 +117,7 @@ export function write_file(args: {
   json_format?: 'object' | 'array'
 }) {
   let { file, sheets, json_format } = args
-  require_local_file(file, 'write_file_async')
+  require_local_file(file, 'write_gsheets_file')
   let ext = extname(file)
   let write: (file: string, rows: CellValue[][]) => void
   switch (ext) {
@@ -238,8 +238,8 @@ export function convert_file(
     separator,
     ...rest
   } = args
-  require_local_file(source_file, 'convert_file_async')
-  require_local_file(dest_file, 'convert_file_async')
+  require_local_file(source_file, 'read_gsheets_file')
+  require_local_file(dest_file, 'write_gsheets_file')
   input_separator ||= separator
   output_separator ||= separator
   let sheets = read_file({
@@ -263,7 +263,7 @@ export type SheetInfo = {
 
 /** List sheet/table names without converting cell data. */
 export function list_sheet_names(file: string): string[] {
-  require_local_file(file, 'list_sheet_names_async')
+  require_local_file(file, 'list_gsheets_names')
   let ext = extname(file)
   switch (ext) {
     case '.xlsx': {
@@ -1042,16 +1042,15 @@ export function objects_to_rows<T>(
 }
 
 /*
- * Referenced by a `gsheets:` pseudo-path instead of a file path:
+ * Google Sheets, referenced by a `gsheets:` pseudo-path instead of a file path:
  *
  *   gsheets:<spreadsheet-id>                 all tabs
  *   gsheets:<spreadsheet-id>/<sheet-name>    one tab, by name
  *   gsheets:<spreadsheet-id>#<sheet-index>   one tab, by zero-based index
  *
- * Google Sheets requires network access, so it is only reachable through the
- * async variants (`read_file_async`, `write_file_async`, `convert_file_async`,
- * `list_sheet_names_async`). Those delegate to the original synchronous
- * functions for ordinary file paths, so existing behaviour is unchanged.
+ * These need network access, so they are async and sit beside the synchronous
+ * file functions rather than inside them. Use `is_gsheets_ref()` to tell which
+ * of the two a given path needs.
  */
 
 export type GoogleSheetsRef = {
@@ -1071,10 +1070,10 @@ export function is_gsheets_ref(file: string): boolean {
   return file.startsWith('gsheets:')
 }
 
-function require_local_file(file: string, async_fn: string): void {
+function require_local_file(file: string, gsheets_fn: string): void {
   if (is_gsheets_ref(file)) {
     throw new Error(
-      `Google Sheets requires the async API, use ${async_fn}() instead`,
+      `Google Sheets needs network access, use ${gsheets_fn}() instead`,
     )
   }
 }
@@ -1272,7 +1271,7 @@ export async function list_gsheets_names(
   return resolve_gsheets_grids(grids, ref).map(grid => grid.name)
 }
 
-/** Read one or more tabs of a Google Sheets spreadsheet. */
+/** Read one or more tabs, the async counterpart of `read_file`. */
 export async function read_gsheets_file(
   args: {
     file: string
@@ -1303,7 +1302,14 @@ export async function read_gsheets_file(
     )
     // padded so the trim and field helpers can index every column
     squarize_rows(rows, null)
-    sheets.push({ name: grid.name, rows: trim_rows(rows, args) })
+    sheets.push({
+      name: grid.name,
+      rows: filter_fields({
+        rows: trim_rows(rows, args),
+        fields: args.fields,
+        exclude_fields: args.exclude_fields,
+      }),
+    })
   }
   return sheets
 }
@@ -1389,9 +1395,8 @@ async function write_gsheets_grid(args: {
 }
 
 /**
- * Write tables into a Google Sheets spreadsheet.
- *
- * `gsheets:<id>/<name>` and `gsheets:<id>#<index>` target a single tab, while
+ * Write tables into a Google Sheets spreadsheet, the async counterpart of
+ * `write_file`. A `/<name>` or `#<index>` selector targets a single tab, while
  * `gsheets:<id>` writes each table to its own tab named after the table.
  */
 export async function write_gsheets_file(
@@ -1447,149 +1452,4 @@ export async function write_gsheets_file(
       rows: sheets[i].rows,
     })
   }
-}
-
-/**
- * Async version of `list_sheet_names` that also accepts `gsheets:` references.
- */
-export async function list_sheet_names_async(
-  file: string,
-  options: GoogleSheetsOptions = {},
-): Promise<string[]> {
-  if (is_gsheets_ref(file)) {
-    return list_gsheets_names({ ...options, file })
-  }
-  return list_sheet_names(file)
-}
-
-/** Async version of `read_file` that also accepts `gsheets:` references. */
-export function read_file_async(
-  args: {
-    /*
-     * Listed first, otherwise a tab named like a file (`gsheets:<id>/data.csv`)
-     * matches the text file overload below and is typed as string cells.
-     */
-    file: `gsheets:${string}`
-  } & ExtraReadFileOptions &
-    GoogleSheetsOptions,
-): Promise<SheetData<CellValue>[]>
-export function read_file_async(
-  args: {
-    file:
-      | `${string}.md`
-      | `${string}.markdown`
-      | `${string}.csv`
-      | `${string}.tsv`
-      | `${string}.txt`
-  } & ExtraReadFileOptions & GoogleSheetsOptions,
-): Promise<SheetData<string>[]>
-export function read_file_async(
-  args: {
-    file: `${string}.xlsx` | `${string}.json` | string
-  } & ExtraReadFileOptions &
-    GoogleSheetsOptions,
-): Promise<SheetData<CellValue>[]>
-export async function read_file_async(
-  args: {
-    file: string
-  } & ExtraReadFileOptions &
-    GoogleSheetsOptions,
-): Promise<SheetData<CellValue>[]> {
-  if (!is_gsheets_ref(args.file)) {
-    return read_file(args)
-  }
-  let sheets = await read_gsheets_file(args)
-  return sheets.map(sheet => ({
-    ...sheet,
-    rows: filter_fields({
-      rows: sheet.rows,
-      fields: args.fields,
-      exclude_fields: args.exclude_fields,
-    }),
-  }))
-}
-
-/** Async version of `write_file` that also accepts `gsheets:` references. */
-export async function write_file_async(
-  args: {
-    file: string
-    sheets: SheetData<CellValue>[]
-    /**
-     * only used when file is /dev/stdout
-     * @default 'auto'
-     */
-    show_name?: ShowNameMode
-    /**
-     * for txt files
-     */
-    separator?: string
-    /**
-     * for json files
-     * @default 'object'
-     */
-    json_format?: 'object' | 'array'
-  } & GoogleSheetsOptions,
-): Promise<void> {
-  if (is_gsheets_ref(args.file)) {
-    return write_gsheets_file(args)
-  }
-  write_file(args)
-}
-
-/**
- * Async version of `convert_file`. Either side may be a `gsheets:` reference,
- * so this also converts a spreadsheet to a file and a file to a spreadsheet.
- */
-export async function convert_file_async(
-  args: {
-    source_file: string
-    dest_file: string
-    /** for output json files, default 'object' */
-    json_format?: 'object' | 'array'
-    /** default same as separator */
-    input_separator?: string
-    /** default same as separator */
-    output_separator?: string
-  } & ExtraReadFileOptions &
-    GoogleSheetsOptions,
-): Promise<void> {
-  let {
-    source_file,
-    dest_file,
-    json_format,
-    input_separator,
-    output_separator,
-    separator,
-    sa_cred_file,
-    ...rest
-  } = args
-  if (!is_gsheets_ref(source_file) && !is_gsheets_ref(dest_file)) {
-    // sa_cred_file is dropped here, it means nothing to the local file path
-    convert_file({
-      ...rest,
-      source_file,
-      dest_file,
-      json_format,
-      input_separator,
-      output_separator,
-      separator,
-    })
-    return
-  }
-  input_separator ||= separator
-  output_separator ||= separator
-  let sheets = await read_file_async({
-    ...rest,
-    sa_cred_file,
-    file: source_file,
-    separator: input_separator,
-  })
-  await write_file_async({
-    ...rest,
-    sa_cred_file,
-    file: dest_file,
-    sheets,
-    json_format,
-    separator: output_separator,
-  })
 }

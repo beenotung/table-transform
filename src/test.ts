@@ -7,7 +7,6 @@ import {
   parse_gsheets_ref,
   read_csv_file,
   read_file,
-  read_file_async,
   read_json_file,
   read_md_file,
   read_xlsx_file,
@@ -288,19 +287,19 @@ function test_encode_gsheets_a1() {
   assert.strictEqual(encode_gsheets_sheet_name('A/B'), `'A/B'`)
 }
 
-/** the sync API must point callers at the async one instead of failing oddly */
-function test_gsheets_requires_async() {
+/** the file API must point callers at the gsheets one instead of failing oddly */
+function test_gsheets_requires_network_api() {
   assert.throws(
     () => read_file({ file: 'gsheets:1AbC/Roster' }),
-    /use read_file_async\(\)/,
+    /use read_gsheets_file\(\)/,
   )
   assert.throws(
     () => write_file({ file: 'gsheets:1AbC/Roster', sheets: [] }),
-    /use write_file_async\(\)/,
+    /use write_gsheets_file\(\)/,
   )
   assert.throws(
     () => list_sheet_names('gsheets:1AbC'),
-    /use list_sheet_names_async\(\)/,
+    /use list_gsheets_names\(\)/,
   )
   assert.throws(
     () =>
@@ -308,15 +307,16 @@ function test_gsheets_requires_async() {
         source_file: 'gsheets:1AbC/Roster',
         dest_file: 'out.csv',
       }),
-    /use convert_file_async\(\)/,
+    /use read_gsheets_file\(\)/,
   )
-}
-
-/** local files must behave the same through the async wrappers */
-async function test_read_file_async_local() {
-  let sync_rows = read_file({ file: 'res/roster.md' })
-  let async_rows = await read_file_async({ file: 'res/roster.md' })
-  assert.deepStrictEqual(async_rows, sync_rows)
+  assert.throws(
+    () =>
+      convert_file({
+        source_file: 'res/roster.md',
+        dest_file: 'gsheets:1AbC/Roster',
+      }),
+    /use write_gsheets_file\(\)/,
+  )
 }
 
 // let data = test_xlsx_file()
@@ -332,18 +332,10 @@ test_list_sheet_names()
 test_filter_fields()
 test_parse_gsheets_ref()
 test_encode_gsheets_a1()
-test_gsheets_requires_async()
+test_gsheets_requires_network_api()
 // console.log(data)
 // debugger
 
 // let data = read_md_file({ file: 'res/roster.md' })
 
-test_read_file_async_local().then(
-  () => {
-    console.log('done.')
-  },
-  error => {
-    console.error(error)
-    process.exit(1)
-  },
-)
+console.log('done.')

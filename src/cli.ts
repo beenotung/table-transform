@@ -1,11 +1,15 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
-  list_sheet_names_async,
+  is_gsheets_ref,
+  list_gsheets_names,
+  list_sheet_names,
   parse_gsheets_ref,
-  read_file_async,
+  read_file,
+  read_gsheets_file,
   resolve_sa_cred_file,
-  write_file_async,
+  write_file,
+  write_gsheets_file,
 } from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
@@ -427,9 +431,12 @@ async function main() {
     process.exit(1)
   }
   if (args.list) {
-    let names = await list_sheet_names_async(args.input, {
-      sa_cred_file: args.sa_cred_file,
-    })
+    let names = is_gsheets_ref(args.input)
+      ? await list_gsheets_names({
+          file: args.input,
+          sa_cred_file: args.sa_cred_file,
+        })
+      : list_sheet_names(args.input)
     for (let name of names) {
       console.log(name)
     }
@@ -437,7 +444,7 @@ async function main() {
   }
   let output =
     args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
-  let sheets = await read_file_async({
+  let read_options = {
     file: args.input,
     separator: args.input_separator,
     trim_string: args.trim_string,
@@ -445,16 +452,28 @@ async function main() {
     trim_cols: args.trim_cols,
     fields: args.fields,
     exclude_fields: args.exclude_fields,
-    sa_cred_file: args.sa_cred_file,
-  })
-  await write_file_async({
-    file: output,
-    sheets,
-    show_name: args.show_name,
-    separator: args.output_separator,
-    json_format: args.json_format,
-    sa_cred_file: args.sa_cred_file,
-  })
+  }
+  let sheets = is_gsheets_ref(args.input)
+    ? await read_gsheets_file({
+        ...read_options,
+        sa_cred_file: args.sa_cred_file,
+      })
+    : read_file(read_options)
+  if (is_gsheets_ref(output)) {
+    await write_gsheets_file({
+      file: output,
+      sheets,
+      sa_cred_file: args.sa_cred_file,
+    })
+  } else {
+    write_file({
+      file: output,
+      sheets,
+      show_name: args.show_name,
+      separator: args.output_separator,
+      json_format: args.json_format,
+    })
+  }
 }
 main().catch(error => {
   console.error(String(error))
