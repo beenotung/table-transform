@@ -1190,24 +1190,29 @@ async function gsheets_call<T>(
   }
 }
 
+/** the credential file's client, reused by the rest of the run */
+let gsheets_client: sheets_v4.Sheets | undefined
+
 /** Authenticate against the spreadsheet and list its tabs. */
 async function open_gsheets(args: {
   ref: GoogleSheetsRef
   options: GoogleSheetsOptions
-  readonly: boolean
 }): Promise<GoogleSheetsSession> {
   let spreadsheet_id = args.ref.spreadsheet_id
   let key_file = resolve_sa_cred_file(args.options)
-  // loaded on demand so non-gsheets usage never pays for it
-  let { sheets, auth } = await import('@googleapis/sheets')
-  let scope = 'https://www.googleapis.com/auth/spreadsheets'
-  let client = sheets({
-    version: 'v4',
-    auth: new auth.GoogleAuth({
-      keyFile: key_file,
-      scopes: [args.readonly ? scope + '.readonly' : scope],
-    }),
-  })
+  if (!gsheets_client) {
+    // loaded on demand so non-gsheets usage never pays for it
+    let { sheets, auth } = await import('@googleapis/sheets')
+    gsheets_client = sheets({
+      version: 'v4',
+      auth: new auth.GoogleAuth({
+        keyFile: key_file,
+        // the write scope covers reads too, so one token serves both
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      }),
+    })
+  }
+  let client = gsheets_client
   let data = await gsheets_call('list the tabs', () =>
     client.spreadsheets.get({
       spreadsheetId: spreadsheet_id,
@@ -1296,7 +1301,7 @@ export async function list_gsheets_names(
   } & GoogleSheetsOptions,
 ): Promise<string[]> {
   let ref = require_gsheets_ref(args.file)
-  let { grids } = await open_gsheets({ ref, options: args, readonly: true })
+  let { grids } = await open_gsheets({ ref, options: args })
   return resolve_gsheets_grids(grids, ref).map(grid => grid.name)
 }
 
@@ -1311,7 +1316,6 @@ export async function read_gsheets_file(
   let { spreadsheet_id, client, grids } = await open_gsheets({
     ref,
     options: args,
-    readonly: true,
   })
   let sheets: SheetData<CellValue>[] = []
   // read tabs one at a time to bound memory and stay clear of rate limits
@@ -1416,7 +1420,7 @@ export async function write_gsheets_file(
   if (sheets.length === 0) {
     return
   }
-  let session = await open_gsheets({ ref, options: args, readonly: false })
+  let session = await open_gsheets({ ref, options: args })
 
   let names: string[]
   if (ref.sheet_index !== undefined) {
