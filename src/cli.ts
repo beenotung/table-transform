@@ -254,7 +254,7 @@ function get_args() {
     if (format) {
       throw new Error('--list cannot be used with --format')
     }
-    require_sa_cred_file({ files: [input], sa_cred_file })
+    check_gsheets_refs({ files: [input], sa_cred_file })
     return {
       input,
       sa_cred_file,
@@ -264,7 +264,7 @@ function get_args() {
   if (!output) {
     output = '/dev/stdout'
   }
-  require_sa_cred_file({ files: [input, output], sa_cred_file })
+  check_gsheets_refs({ files: [input, output], sa_cred_file })
   if (format && output !== '/dev/stdout') {
     throw new Error('format specified but output is not stdout')
   }
@@ -294,20 +294,15 @@ function get_args() {
   }
 }
 
-/** fail before any network call when a gsheets ref has no credentials */
-function require_sa_cred_file(args: {
+/** fail on a malformed gsheets reference, or on missing credentials for one */
+function check_gsheets_refs(args: {
   files: string[]
   sa_cred_file: string
 }): void {
-  // parsed first, so a malformed reference reports itself instead of the
-  // credentials being blamed for it
-  let has_gsheets = false
-  for (let file of args.files) {
-    if (parse_gsheets_ref(file)) {
-      has_gsheets = true
-    }
-  }
-  if (has_gsheets) {
+  // every file is parsed first, so a malformed reference reports itself
+  // instead of the credentials being blamed for it
+  let refs = args.files.map(file => parse_gsheets_ref(file))
+  if (refs.some(ref => ref)) {
     resolve_sa_cred_file({ sa_cred_file: args.sa_cred_file })
   }
 }
