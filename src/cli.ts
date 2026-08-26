@@ -431,7 +431,7 @@ async function main() {
   }
   used_gsheets = is_gsheets_ref(args.input)
   if (args.list) {
-    let names = is_gsheets_ref(args.input)
+    let names = used_gsheets
       ? await list_gsheets_names({
           file: args.input,
           sa_cred_file: args.sa_cred_file,
@@ -442,9 +442,7 @@ async function main() {
     }
     return
   }
-  let output =
-    args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
-  used_gsheets ||= is_gsheets_ref(output)
+  // sa_cred_file is ignored by the local file functions
   let read_options = {
     file: args.input,
     separator: args.input_separator,
@@ -453,27 +451,26 @@ async function main() {
     trim_cols: args.trim_cols,
     fields: args.fields,
     exclude_fields: args.exclude_fields,
+    sa_cred_file: args.sa_cred_file,
   }
-  let sheets = is_gsheets_ref(args.input)
-    ? await read_gsheets_file({
-        ...read_options,
-        sa_cred_file: args.sa_cred_file,
-      })
+  let sheets = used_gsheets
+    ? await read_gsheets_file(read_options)
     : read_file(read_options)
+  let output =
+    args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
+  let write_options = {
+    file: output,
+    sheets,
+    show_name: args.show_name,
+    separator: args.output_separator,
+    json_format: args.json_format,
+    sa_cred_file: args.sa_cred_file,
+  }
   if (is_gsheets_ref(output)) {
-    await write_gsheets_file({
-      file: output,
-      sheets,
-      sa_cred_file: args.sa_cred_file,
-    })
+    used_gsheets = true
+    await write_gsheets_file(write_options)
   } else {
-    write_file({
-      file: output,
-      sheets,
-      show_name: args.show_name,
-      separator: args.output_separator,
-      json_format: args.json_format,
-    })
+    write_file(write_options)
   }
 }
 main().catch(error => {
