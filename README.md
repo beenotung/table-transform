@@ -1,12 +1,13 @@
 # table-transform
 
-Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain text. Includes a CLI and a TypeScript library for reading, writing, and transforming tables.
+Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, plain text, and Google Sheets. Includes a CLI and a TypeScript library for reading, writing, and transforming tables.
 
 [![npm Package Version](https://img.shields.io/npm/v/table-transform)](https://www.npmjs.com/package/table-transform)
 
 ## Features
 
 - Convert between **markdown**, **csv**, **tsv**, **xlsx**, **json**, and **txt**
+- Read and write **Google Sheets** with a service account
 - Read multiple markdown tables from one file
 - Read/write **txt** as SQLite `.mode table` ASCII box tables (auto-padded columns)
 - Read multiple Excel sheets, with optional cell range
@@ -17,6 +18,8 @@ Convert tabular data between markdown, CSV, TSV, Excel (xlsx), JSON, and plain t
 - TypeScript support with typed return values per format
 
 ## Installation
+
+Requires Node.js 18 or newer.
 
 Install as a library in your project:
 
@@ -61,6 +64,9 @@ Options to disable trimming (default is enabled):
   --no-trim-rows         Preserve leading/trailing empty rows
   --no-trim-cols         Preserve leading/trailing empty columns
 
+Options for Google Sheets:
+  --sa-cred-file <file>      Service account credential json file
+
 Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\t')
   --input-separator <char>   Default same as --separator
@@ -91,6 +97,11 @@ Supported formats:
   - xlsx
   - json
 
+Google Sheets references (use in place of an input/output file):
+  gsheets:<spreadsheet-id>                 All tabs
+  gsheets:<spreadsheet-id>/<sheet-name>    One tab, by name
+  gsheets:<spreadsheet-id>#<sheet-index>   One tab, by zero-based index
+
 Display table name modes:
   auto   : display table name only if there are multiple tables
   always : always display table name
@@ -120,6 +131,48 @@ table-transform source.csv -x "Email, CV" export.csv
 ```
 
 Run `table-transform --help` for more example commands.
+
+### Google Sheets
+
+Use a `gsheets:` reference wherever a file path is accepted. The spreadsheet id is the long token in the sheet URL, between `/d/` and `/edit`:
+
+```
+https://docs.google.com/spreadsheets/d/1AbC.....XyZ/edit#gid=0
+                                       ^^^^^^^^^^^^^
+```
+
+| Reference | Selects |
+| --- | --- |
+| `gsheets:<spreadsheet-id>` | All tabs, like the sheets of an xlsx workbook |
+| `gsheets:<spreadsheet-id>/<sheet-name>` | One tab, by name |
+| `gsheets:<spreadsheet-id>#<sheet-index>` | One tab, by zero-based index |
+
+A tab name is taken verbatim, so `gsheets:1AbC/2024` means the tab **named** `2024`, and only `gsheets:1AbC#3` means "the fourth tab". A name may itself contain `#`, since the selector is whichever of `/` or `#` comes first.
+
+**Setup:**
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a service account and enable the **Google Sheets API** for its project.
+2. Create a JSON key for that service account and download it.
+3. **Share the spreadsheet with the service account's email address** (the `client_email` in the JSON key), as Editor for writing or Viewer for reading. This step is easy to miss, and skipping it produces a `403` even though the credentials are valid.
+
+Pass the key with `--sa-cred-file`:
+
+```bash
+# list the tab names
+table-transform --list gsheets:1AbC --sa-cred-file service-account.json
+
+# google sheets -> file
+table-transform gsheets:1AbC/Roster export.csv --sa-cred-file service-account.json
+table-transform gsheets:1AbC#0 export.json --sa-cred-file service-account.json
+
+# every tab -> one xlsx workbook
+table-transform gsheets:1AbC export.xlsx --sa-cred-file service-account.json
+
+# file -> google sheets (the tab is created when missing)
+table-transform source.csv gsheets:1AbC/Roster --sa-cred-file service-account.json
+```
+
+Column selection and trimming options work the same as for files.
 
 ## Library Usage Example
 
@@ -193,6 +246,50 @@ import { list_sheet_names } from 'table-transform'
 let names = list_sheet_names('res/multi-table.xlsx')
 // ['Users', 'Posts']
 ```
+
+### Read and write Google Sheets
+
+Google Sheets needs network access, so it has its own async functions alongside the synchronous file ones. They take the same options, so a spreadsheet reads and writes like any other table.
+
+```typescript
+import {
+  is_gsheets_ref,
+  list_gsheets_names,
+  read_file,
+  read_gsheets_file,
+  write_file,
+  write_gsheets_file,
+} from 'table-transform'
+
+let sa_cred_file = 'service-account.json'
+
+let names = await list_gsheets_names({ file: 'gsheets:1AbC', sa_cred_file })
+// ['Users', 'Posts']
+
+// spreadsheet -> csv
+let sheets = await read_gsheets_file({
+  file: 'gsheets:1AbC/Roster',
+  fields: ['No', 'SID'],
+  sa_cred_file,
+})
+write_file({ file: 'res/roster.csv', sheets })
+
+// csv -> spreadsheet
+await write_gsheets_file({
+  file: 'gsheets:1AbC/Roster',
+  sheets: read_file({ file: 'res/roster.csv' }),
+  sa_cred_file,
+})
+
+// use is_gsheets_ref() when the path comes from user input
+let rows = is_gsheets_ref(file)
+  ? await read_gsheets_file({ file, sa_cred_file })
+  : read_file({ file })
+```
+
+The synchronous `read_file` / `write_file` / `convert_file` / `list_sheet_names` handle local files only; passing them a `gsheets:` reference throws and points at the matching Google Sheets function.
+
+A write replaces the whole tab: it is resized to the extent of the new rows, then every cell is written. A tab named in the reference is created if it does not exist yet, while `gsheets:<id>#<index>` requires an existing tab.
 
 ### Read markdown with multiple tables
 
@@ -325,6 +422,54 @@ export function convert_file(
 ): void
 
 export function list_sheet_names(file: string): string[]
+
+/* Google Sheets. These need network access, so they are async and sit beside
+ * the synchronous file functions rather than inside them. Use `is_gsheets_ref()`
+ * to tell which of the two a given path needs. */
+
+export type GoogleSheetsOptions = {
+  /** service account credential json file */
+  sa_cred_file?: string
+}
+
+export type GoogleSheetsRef = {
+  spreadsheet_id: string
+  /** set when the tab is selected by name */
+  sheet_name?: string
+  /** set when the tab is selected by zero-based index */
+  sheet_index?: number
+}
+
+export function is_gsheets_ref(file: string): boolean
+
+/** returns null when the given string is an ordinary file path */
+export function parse_gsheets_ref(file: string): GoogleSheetsRef | null
+
+/** throws when the credential file is missing or not set */
+export function resolve_sa_cred_file(options?: GoogleSheetsOptions): string
+
+/** quote a tab name for A1 notation, e.g. `Sales 'Q1'` -> `'Sales ''Q1'''` */
+export function encode_gsheets_sheet_name(name: string): string
+
+export function list_gsheets_names(
+  args: {
+    file: string
+  } & GoogleSheetsOptions,
+): Promise<string[]>
+
+export function read_gsheets_file(
+  args: {
+    file: string
+  } & ExtraReadFileOptions &
+    GoogleSheetsOptions,
+): Promise<SheetData<CellValue>[]>
+
+export function write_gsheets_file(
+  args: {
+    file: string
+    sheets: SheetData<CellValue>[]
+  } & GoogleSheetsOptions,
+): Promise<void>
 
 export function read_xlsx_file(
   args: {

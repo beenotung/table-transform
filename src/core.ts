@@ -1,7 +1,9 @@
 import { readFile, writeFile, utils } from '@e965/xlsx'
 import { to_csv, from_csv } from '@beenotung/tslib/csv'
-import { readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { basename, dirname, extname, join } from 'path'
+// type-only, the module itself is loaded on demand, see open_gsheets()
+import type { sheets_v4 } from '@googleapis/sheets'
 
 export type SheetData<T extends CellValue> = {
   name: string
@@ -46,6 +48,7 @@ export function read_file(
   } & ExtraReadFileOptions,
 ): SheetData<CellValue>[] {
   let file = args.file
+  require_local_file(file, 'read_gsheets_file')
   let ext = extname(file)
   let sheets: SheetData<CellValue>[]
   switch (ext) {
@@ -77,14 +80,7 @@ export function read_file(
     default:
       throw new Error(`Unsupported file extension: ${ext}`)
   }
-  return sheets.map(sheet => ({
-    ...sheet,
-    rows: filter_fields({
-      rows: sheet.rows,
-      fields: args.fields,
-      exclude_fields: args.exclude_fields,
-    }),
-  }))
+  return filter_sheets_fields(sheets, args)
 }
 
 function infer_sheet_name(file: string) {
@@ -114,6 +110,7 @@ export function write_file(args: {
   json_format?: 'object' | 'array'
 }) {
   let { file, sheets, json_format } = args
+  require_local_file(file, 'write_gsheets_file')
   let ext = extname(file)
   let write: (file: string, rows: CellValue[][]) => void
   switch (ext) {
@@ -234,6 +231,8 @@ export function convert_file(
     separator,
     ...rest
   } = args
+  require_local_file(source_file, 'read_gsheets_file')
+  require_local_file(dest_file, 'write_gsheets_file')
   input_separator ||= separator
   output_separator ||= separator
   let sheets = read_file({
@@ -257,6 +256,7 @@ export type SheetInfo = {
 
 /** List sheet/table names without converting cell data. */
 export function list_sheet_names(file: string): string[] {
+  require_local_file(file, 'list_gsheets_names')
   let ext = extname(file)
   switch (ext) {
     case '.xlsx': {
@@ -951,6 +951,21 @@ function is_object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** apply the field options to every sheet, the last step of every read */
+function filter_sheets_fields<T extends CellValue>(
+  sheets: SheetData<T>[],
+  args: ExtraReadFileOptions,
+): SheetData<T>[] {
+  return sheets.map(sheet => ({
+    ...sheet,
+    rows: filter_fields({
+      rows: sheet.rows,
+      fields: args.fields,
+      exclude_fields: args.exclude_fields,
+    }),
+  }))
+}
+
 export function filter_fields<T extends CellValue>(args: {
   rows: T[][]
   fields?: string[]
@@ -1032,4 +1047,405 @@ export function objects_to_rows<T>(
     rows.push(row)
   }
   return rows
+}
+
+/*
+ * Google Sheets, referenced by a `gsheets:` pseudo-path instead of a file path:
+ *
+ *   gsheets:<spreadsheet-id>                 all tabs
+ *   gsheets:<spreadsheet-id>/<sheet-name>    one tab, by name
+ *   gsheets:<spreadsheet-id>#<sheet-index>   one tab, by zero-based index
+ *
+ * These need network access, so they are async and sit beside the synchronous
+ * file functions rather than inside them. Use `is_gsheets_ref()` to tell which
+ * of the two a given path needs.
+ */
+
+export type GoogleSheetsRef = {
+  spreadsheet_id: string
+  /** set when the tab is selected by name */
+  sheet_name?: string
+  /** set when the tab is selected by zero-based index */
+  sheet_index?: number
+}
+
+export type GoogleSheetsOptions = {
+  /** service account credential json file */
+  sa_cred_file?: string
+}
+
+export function is_gsheets_ref(file: string): boolean {
+  return file.startsWith('gsheets:')
+}
+
+function require_local_file(file: string, gsheets_fn: string): void {
+  if (is_gsheets_ref(file)) {
+    throw new Error(
+      `Google Sheets needs network access, use ${gsheets_fn}() instead`,
+    )
+  }
+}
+
+/**
+ * Parse a `gsheets:` reference, or return null for an ordinary file path. The
+ * id ends at the first "/" or "#", so a tab name may contain "#".
+ */
+export function parse_gsheets_ref(file: string): GoogleSheetsRef | null {
+  if (!is_gsheets_ref(file)) {
+    return null
+  }
+  let [, id, separator, selector] = /^gsheets:([^/#]*)(?:([/#])(.*))?$/s.exec(
+    file,
+  )!
+  let spreadsheet_id = id.trim()
+  if (!spreadsheet_id) {
+    throw new Error('Missing Google Sheets spreadsheet id')
+  }
+  if (!separator) {
+    return { spreadsheet_id }
+  }
+  selector = selector.trim()
+  if (separator === '/') {
+    if (!selector) {
+      throw new Error('Missing Google Sheets sheet name after "/"')
+    }
+    return { spreadsheet_id, sheet_name: selector }
+  }
+  let sheet_index = +selector
+  if (!/^\d+$/.test(selector) || !Number.isSafeInteger(sheet_index)) {
+    throw new Error(
+      'Invalid Google Sheets sheet index after "#", expected a zero-based non-negative integer',
+    )
+  }
+  return { spreadsheet_id, sheet_index }
+}
+
+function require_gsheets_ref(file: string): GoogleSheetsRef {
+  let ref = parse_gsheets_ref(file)
+  if (!ref) {
+    throw new Error(`Not a Google Sheets reference: ${file}`)
+  }
+  return ref
+}
+
+/**
+ * Resolve the service account credential file, checking it here so a wrong
+ * path is reported before any network call, where it would be a bare ENOENT.
+ */
+export function resolve_sa_cred_file(
+  options: GoogleSheetsOptions = {},
+): string {
+  let key_file = options.sa_cred_file
+  if (!key_file) {
+    throw new Error(
+      'Missing Google service account credential file, use --sa-cred-file <file>',
+    )
+  }
+  if (!existsSync(key_file)) {
+    throw new Error(
+      `Google service account credential file not found: ${key_file}`,
+    )
+  }
+  return key_file
+}
+
+/** a tab, by its stable numeric id (needed to resize it) and its name */
+type GoogleSheetsGrid = { id: number; name: string }
+
+/** an authenticated spreadsheet, and the tabs it had when it was opened */
+type GoogleSheetsSession = {
+  spreadsheet_id: string
+  client: sheets_v4.Sheets
+  grids: GoogleSheetsGrid[]
+}
+
+function to_gsheets_grid(
+  properties?: sheets_v4.Schema$SheetProperties | null,
+): GoogleSheetsGrid {
+  let name = properties?.title || ''
+  let id = properties?.sheetId
+  // not defaulted, 0 is a real tab id and a resize would hit the wrong tab
+  if (typeof id !== 'number') {
+    throw new Error(
+      `Missing Google Sheets tab id in the API response for tab: ${name}`,
+    )
+  }
+  return { id, name }
+}
+
+/** unwrap a Sheets API response, naming the operation in a failure */
+async function gsheets_call<T>(
+  operation: string,
+  request: () => Promise<{ data: T }>,
+): Promise<T> {
+  try {
+    return (await request()).data
+  } catch (error: any) {
+    let status =
+      typeof error?.status === 'number' ? ` (HTTP ${error.status})` : ''
+    throw new Error(
+      `Failed to ${operation} in Google Sheets${status}: ${error?.message || error}`,
+      { cause: error },
+    )
+  }
+}
+
+/** the credential file's client, reused by the rest of the run */
+let gsheets_client: sheets_v4.Sheets | undefined
+
+/** Authenticate against the spreadsheet and list its tabs. */
+async function open_gsheets(args: {
+  ref: GoogleSheetsRef
+  options: GoogleSheetsOptions
+}): Promise<GoogleSheetsSession> {
+  let spreadsheet_id = args.ref.spreadsheet_id
+  let key_file = resolve_sa_cred_file(args.options)
+  if (!gsheets_client) {
+    // loaded on demand so non-gsheets usage never pays for it
+    let { sheets, auth } = await import('@googleapis/sheets')
+    gsheets_client = sheets({
+      version: 'v4',
+      auth: new auth.GoogleAuth({
+        keyFile: key_file,
+        // the write scope covers reads too, so one token serves both
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      }),
+    })
+  }
+  let client = gsheets_client
+  let data = await gsheets_call('list the tabs', () =>
+    client.spreadsheets.get({
+      spreadsheetId: spreadsheet_id,
+      fields: 'sheets.properties(sheetId,title)',
+    }),
+  )
+  let grids = (data.sheets || []).map(sheet =>
+    to_gsheets_grid(sheet.properties),
+  )
+  return { spreadsheet_id, client, grids }
+}
+
+/** send a single spreadsheet-level request, e.g. adding or resizing a tab */
+function gsheets_batch_update(
+  session: GoogleSheetsSession,
+  operation: string,
+  request: sheets_v4.Schema$Request,
+) {
+  return gsheets_call(operation, () =>
+    session.client.spreadsheets.batchUpdate({
+      spreadsheetId: session.spreadsheet_id,
+      requestBody: { requests: [request] },
+    }),
+  )
+}
+
+/** the tabs the reference selects, or every tab when it has no selector */
+function resolve_gsheets_grids(
+  grids: GoogleSheetsGrid[],
+  ref: GoogleSheetsRef,
+): GoogleSheetsGrid[] {
+  if (ref.sheet_index !== undefined) {
+    let grid = grids[ref.sheet_index]
+    if (!grid) {
+      throw new Error(
+        `Google Sheets tab index out of range: ${ref.sheet_index}, the spreadsheet has ${grids.length} tab(s)`,
+      )
+    }
+    return [grid]
+  }
+  if (ref.sheet_name !== undefined) {
+    let grid = grids.find(grid => grid.name === ref.sheet_name)
+    if (!grid) {
+      throw new Error(`Google Sheets tab not found: ${ref.sheet_name}`)
+    }
+    return [grid]
+  }
+  return grids
+}
+
+/** quote a tab name for A1 notation, e.g. `Sales 'Q1'` -> `'Sales ''Q1'''` */
+export function encode_gsheets_sheet_name(name: string): string {
+  return `'${name.replaceAll("'", "''")}'`
+}
+
+/** pad ragged rows into a rectangle in place, and report the width */
+function squarize_rows<T>(rows: T[][], filler: T): number {
+  let width = rows.reduce((width, row) => Math.max(width, row.length), 0)
+  for (let row of rows) {
+    while (row.length < width) {
+      row.push(filler)
+    }
+  }
+  return width
+}
+
+function from_gsheets_value(value: unknown): CellValue {
+  let type = typeof value
+  if (type === 'string' || type === 'number' || type === 'boolean') {
+    return value as CellValue
+  }
+  return value === null || value === undefined ? null : String(value)
+}
+
+function to_gsheets_value(value: CellValue): string | number | boolean {
+  if (value === null) {
+    return ''
+  }
+  return value instanceof Date ? value.toISOString() : value
+}
+
+/** List the tab names of a Google Sheets spreadsheet. */
+export async function list_gsheets_names(
+  args: {
+    file: string
+  } & GoogleSheetsOptions,
+): Promise<string[]> {
+  let ref = require_gsheets_ref(args.file)
+  let { grids } = await open_gsheets({ ref, options: args })
+  return resolve_gsheets_grids(grids, ref).map(grid => grid.name)
+}
+
+/** Read one or more tabs, the async counterpart of `read_file`. */
+export async function read_gsheets_file(
+  args: {
+    file: string
+  } & ExtraReadFileOptions &
+    GoogleSheetsOptions,
+): Promise<SheetData<CellValue>[]> {
+  let ref = require_gsheets_ref(args.file)
+  let { spreadsheet_id, client, grids } = await open_gsheets({
+    ref,
+    options: args,
+  })
+  let sheets: SheetData<CellValue>[] = []
+  // read tabs one at a time to bound memory and stay clear of rate limits
+  for (let grid of resolve_gsheets_grids(grids, ref)) {
+    let data = await gsheets_call(`read the tab: ${grid.name}`, () =>
+      client.spreadsheets.values.get({
+        spreadsheetId: spreadsheet_id,
+        // an unqualified tab name covers the whole tab
+        range: encode_gsheets_sheet_name(grid.name),
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'FORMATTED_STRING',
+      }),
+    )
+    let rows: CellValue[][] = (data.values || []).map(row =>
+      (row || []).map(from_gsheets_value),
+    )
+    // padded so the trim and field helpers can index every column
+    squarize_rows(rows, null)
+    sheets.push({ name: grid.name, rows: trim_rows(rows, args) })
+  }
+  return filter_sheets_fields(sheets, args)
+}
+
+/** the tab with this name, created when the spreadsheet has no such tab */
+async function ensure_gsheets_grid(
+  session: GoogleSheetsSession,
+  name: string,
+): Promise<GoogleSheetsGrid> {
+  let existing = session.grids.find(grid => grid.name === name)
+  if (existing) {
+    return existing
+  }
+  let data = await gsheets_batch_update(session, `create the tab: ${name}`, {
+    addSheet: { properties: { title: name } },
+  })
+  let properties = data.replies?.[0]?.addSheet?.properties
+  if (!properties) {
+    throw new Error(`Failed to create Google Sheets tab: ${name}`)
+  }
+  let grid = to_gsheets_grid(properties)
+  session.grids.push(grid)
+  return grid
+}
+
+/** replace the content of a tab, leaving no cell of the old content behind */
+async function write_gsheets_grid(
+  session: GoogleSheetsSession,
+  grid: GoogleSheetsGrid,
+  rows: CellValue[][],
+): Promise<void> {
+  // short rows are padded, otherwise their trailing cells keep the old values
+  let values = rows.map(row => row.map(to_gsheets_value))
+  let width = squarize_rows<string | number | boolean>(values, '')
+  // a tab always keeps at least one cell, so an empty table writes one blank
+  if (width === 0) {
+    values = [['']]
+    width = 1
+  }
+  let height = values.length
+
+  /*
+   * Resized first, which both discards whatever lay outside the new extent and
+   * grows the grid when the new rows do not fit, something values.update
+   * cannot do: it rejects a range past the current grid limits.
+   */
+  await gsheets_batch_update(session, `resize the tab: ${grid.name}`, {
+    updateSheetProperties: {
+      properties: {
+        sheetId: grid.id,
+        gridProperties: { rowCount: height, columnCount: width },
+      },
+      fields: 'gridProperties.rowCount,gridProperties.columnCount',
+    },
+  })
+
+  // A1 column letters are the same in Sheets and xlsx, so reuse the encoder
+  let sheet_name = encode_gsheets_sheet_name(grid.name)
+  let range = `${sheet_name}!A1:${utils.encode_col(width - 1)}${height}`
+  await gsheets_call(`write the range: ${range}`, () =>
+    session.client.spreadsheets.values.update({
+      spreadsheetId: session.spreadsheet_id,
+      range,
+      valueInputOption: 'RAW',
+      requestBody: { values },
+    }),
+  )
+}
+
+/**
+ * Write tables into a Google Sheets spreadsheet, the async counterpart of
+ * `write_file`. A `/<name>` or `#<index>` selector targets a single tab, while
+ * `gsheets:<id>` writes each table to its own tab named after the table.
+ */
+export async function write_gsheets_file(
+  args: {
+    file: string
+    sheets: SheetData<CellValue>[]
+  } & GoogleSheetsOptions,
+): Promise<void> {
+  let ref = require_gsheets_ref(args.file)
+  let sheets = args.sheets
+  if (sheets.length === 0) {
+    return
+  }
+  let session = await open_gsheets({ ref, options: args })
+
+  let names: string[]
+  if (ref.sheet_index !== undefined) {
+    // an index cannot name a new tab, so it must already exist
+    names = resolve_gsheets_grids(session.grids, ref).map(grid => grid.name)
+  } else if (ref.sheet_name !== undefined) {
+    names = [ref.sheet_name]
+  } else {
+    names = sheets.map((sheet, i) => sheet.name || `Sheet${i + 1}`)
+  }
+  if (names.length < sheets.length) {
+    throw new Error(
+      `Cannot write ${sheets.length} tables into a single Google Sheets tab, use gsheets:${ref.spreadsheet_id} to write each table to its own tab`,
+    )
+  }
+  // two tables cannot share a tab, the second would overwrite the first
+  let duplicated = names.find((name, i) => names.indexOf(name) !== i)
+  if (duplicated !== undefined) {
+    throw new Error(
+      `Duplicated table name: ${duplicated}, each table needs its own Google Sheets tab`,
+    )
+  }
+
+  for (let i = 0; i < sheets.length; i++) {
+    let grid = await ensure_gsheets_grid(session, names[i])
+    await write_gsheets_grid(session, grid, sheets[i].rows)
+  }
 }

@@ -1,7 +1,10 @@
 import { csv_to_json, from_csv } from '@beenotung/tslib'
 import {
   convert_file,
+  encode_gsheets_sheet_name,
+  is_gsheets_ref,
   list_sheet_names,
+  parse_gsheets_ref,
   read_csv_file,
   read_file,
   read_json_file,
@@ -218,6 +221,104 @@ function test_filter_fields() {
   )
 }
 
+/** offline, does not touch the network */
+function test_parse_gsheets_ref() {
+  assert.strictEqual(parse_gsheets_ref('res/roster.csv'), null)
+  assert.strictEqual(is_gsheets_ref('res/roster.csv'), false)
+  assert.strictEqual(is_gsheets_ref('gsheets:1AbC'), true)
+
+  // whole spreadsheet
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC'), {
+    spreadsheet_id: '1AbC',
+  })
+
+  // by name
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Roster'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Roster',
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Sheet 1'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Sheet 1',
+  })
+  // a name is taken verbatim, so digits stay a name and "#" stays in the name
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/2024'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: '2024',
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC/Q1#draft'), {
+    spreadsheet_id: '1AbC',
+    sheet_name: 'Q1#draft',
+  })
+
+  // by zero-based index
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC#0'), {
+    spreadsheet_id: '1AbC',
+    sheet_index: 0,
+  })
+  assert.deepStrictEqual(parse_gsheets_ref('gsheets:1AbC#12'), {
+    spreadsheet_id: '1AbC',
+    sheet_index: 12,
+  })
+  // "/" after "#" is part of neither, the index must be digits only
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#a/b'),
+    /Invalid Google Sheets sheet index/,
+  )
+
+  assert.throws(() => parse_gsheets_ref('gsheets:'), /Missing.*spreadsheet id/)
+  assert.throws(() => parse_gsheets_ref('gsheets:1AbC/'), /Missing.*sheet name/)
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#-1'),
+    /Invalid Google Sheets sheet index/,
+  )
+  assert.throws(
+    () => parse_gsheets_ref('gsheets:1AbC#1.5'),
+    /Invalid Google Sheets sheet index/,
+  )
+}
+
+/** A1 notation, where an off-by-one silently writes to the wrong cells */
+function test_encode_gsheets_a1() {
+  assert.strictEqual(encode_gsheets_sheet_name('Roster'), `'Roster'`)
+  assert.strictEqual(encode_gsheets_sheet_name('Sheet 1'), `'Sheet 1'`)
+  // a quote in the name is doubled, otherwise it ends the quoted name early
+  assert.strictEqual(encode_gsheets_sheet_name(`Sales 'Q1'`), `'Sales ''Q1'''`)
+  assert.strictEqual(encode_gsheets_sheet_name('A/B'), `'A/B'`)
+}
+
+/** the file API must point callers at the gsheets one instead of failing oddly */
+function test_gsheets_requires_network_api() {
+  assert.throws(
+    () => read_file({ file: 'gsheets:1AbC/Roster' }),
+    /use read_gsheets_file\(\)/,
+  )
+  assert.throws(
+    () => write_file({ file: 'gsheets:1AbC/Roster', sheets: [] }),
+    /use write_gsheets_file\(\)/,
+  )
+  assert.throws(
+    () => list_sheet_names('gsheets:1AbC'),
+    /use list_gsheets_names\(\)/,
+  )
+  assert.throws(
+    () =>
+      convert_file({
+        source_file: 'gsheets:1AbC/Roster',
+        dest_file: 'out.csv',
+      }),
+    /use read_gsheets_file\(\)/,
+  )
+  assert.throws(
+    () =>
+      convert_file({
+        source_file: 'res/roster.md',
+        dest_file: 'gsheets:1AbC/Roster',
+      }),
+    /use write_gsheets_file\(\)/,
+  )
+}
+
 // let data = test_xlsx_file()
 // let data = test_md_file()
 // test_convert()
@@ -229,6 +330,9 @@ test_newline()
 test_txt_file()
 test_list_sheet_names()
 test_filter_fields()
+test_parse_gsheets_ref()
+test_encode_gsheets_a1()
+test_gsheets_requires_network_api()
 // console.log(data)
 // debugger
 
