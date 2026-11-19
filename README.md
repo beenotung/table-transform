@@ -405,3 +405,29 @@ This is free, libre, and open-source software. It comes down to four essential f
 - The freedom to study how the program works, and change it so it does your computing as you wish
 - The freedom to redistribute copies so you can help others
 - The freedom to distribute copies of your modified versions to others
+
+### Download Google Sheets as `.xlsx`
+
+Download a public Google Sheet directly to a local `.xlsx` file:
+
+```bash
+table-transform "https://docs.google.com/spreadsheets/d/<id>/edit" sheet.xlsx
+```
+
+For non-public sheets, share the sheet with your Google Service Account's `client_email` and pass the JSON key file via `--service-account` (or `GOOGLE_APPLICATION_CREDENTIALS`):
+
+```bash
+table-transform --service-account service-account.json "https://docs.google.com/spreadsheets/d/<id>/edit" sheet.xlsx
+```
+
+Or use `download_google_sheet` programmatically:
+
+```typescript
+import { download_google_sheet } from 'table-transform'
+
+await download_google_sheet({
+  url: 'https://docs.google.com/spreadsheets/d/<id>/edit',
+  output_file: 'sheet.xlsx',
+  service_account: 'service-account.json', // optional for public sheets
+})
+```

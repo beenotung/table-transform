@@ -1,6 +1,14 @@
-import { readFile, readFileSync } from 'fs'
-import { join } from 'path'
-import { list_sheet_names, read_file, write_file } from './core'
+import { readFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { extname, join } from 'path'
+import {
+  download_google_sheet,
+  extract_google_sheet_id,
+  is_google_sheet_url,
+  list_sheet_names,
+  read_file,
+  write_file,
+} from './core'
 
 let formats = ['md', 'markdown', 'csv', 'tsv', 'txt', 'xlsx', 'json']
 
@@ -29,6 +37,7 @@ function get_args() {
   let input = ''
   let output = ''
   let format = ''
+  let service_account = ''
   let trim_string = true
   let trim_rows = true
   let trim_cols = true
@@ -64,6 +73,15 @@ function get_args() {
         output = args[i]
         if (!output) {
           throw new Error('Missing output file')
+        }
+        break
+      }
+      case '--service-account':
+      case '--google-credentials': {
+        i++
+        service_account = args[i]
+        if (!service_account) {
+          throw new Error('Missing service account JSON file path')
         }
         break
       }
@@ -237,6 +255,7 @@ function get_args() {
     }
     return {
       input,
+      service_account,
       list: true as const,
     }
   }
@@ -257,6 +276,7 @@ function get_args() {
   return {
     input,
     output,
+    service_account,
     trim_string,
     trim_rows,
     trim_cols,
@@ -287,16 +307,20 @@ Usage:
 Alias: convert-table, extract-table, export-table
 
 Options:
-  -i, --input <file>     Input file (path)
-  -o, --output <file>    Output file (path or /dev/stdout)
-  -l, --list             List sheet/table names
-  -h, --help             Show help message
-  -v, --version          Show version
+  -i, --input <file|url>   Input file path or Google Sheets URL
+  -o, --output <file>      Output file (path or /dev/stdout)
+  -l, --list               List sheet/table names
+  -h, --help               Show help message
+  -v, --version            Show version
+
+Options for Google Sheets:
+  --service-account <file> Path to Google Service Account JSON key file
+                           (default: GOOGLE_APPLICATION_CREDENTIALS env var)
 
 Options to disable trimming (default is enabled):
-  --no-trim-string       Preserve leading/trailing whitespace characters in string values
-  --no-trim-rows         Preserve leading/trailing empty rows
-  --no-trim-cols         Preserve leading/trailing empty columns
+  --no-trim-string         Preserve leading/trailing whitespace characters in string values
+  --no-trim-rows           Preserve leading/trailing empty rows
+  --no-trim-cols           Preserve leading/trailing empty columns
 
 Options for csv/tsv files:
   -s, --separator <char>     Example: '|' (default auto detect ',' or '\\t')
@@ -322,11 +346,11 @@ Options for column selection (default: all columns; comma-separated or repeat fl
                                 --exclude-field, --exclude-fields
 
 Supported formats:
-  - md, markdown
-  - csv, tsv
-  - txt (ASCII box format from SQLite \`.mode table\`)
-  - xlsx
-  - json
+-   md, markdown
+-   csv, tsv
+-   txt (ASCII box format from SQLite \`.mode table\`)
+-   xlsx
+-   json
 
 Display table name modes:
   auto   : display table name only if there are multiple tables
@@ -336,6 +360,10 @@ Display table name modes:
 When a file contains multiple tables or sheets, output files are split as {basename}-{sheet-name}.{ext}.
 
 Examples:
+
+  # download Google Sheet as local .xlsx (public or with --service-account)
+  table-transform "https://docs.google.com/spreadsheets/d/<id>/edit" sheet.xlsx
+  table-transform --service-account service-account.json "https://docs.google.com/spreadsheets/d/<id>/edit" sheet.xlsx
 
   # list sheet/table names
   table-transform --list source.xlsx
@@ -367,7 +395,7 @@ Examples:
   )
 }
 
-function main() {
+async function main() {
   let args
   try {
     args = get_args()
@@ -375,30 +403,72 @@ function main() {
     console.error(String(error))
     process.exit(1)
   }
-  if (args.list) {
-    let names = list_sheet_names(args.input)
-    for (let name of names) {
-      console.log(name)
+
+  let input = args.input
+  let temp_file = ''
+
+  try {
+    if (is_google_sheet_url(input)) {
+      if (
+        !args.list &&
+        extname(args.output) === '.xlsx' &&
+        args.fields.length === 0 &&
+        args.exclude_fields.length === 0 &&
+        args.trim_string &&
+        args.trim_rows &&
+        args.trim_cols
+      ) {
+        await download_google_sheet({
+          url: input,
+          output_file: args.output,
+          service_account: args.service_account || undefined,
+        })
+        return
+      }
+      let sheet_id = extract_google_sheet_id(input)
+      temp_file = join(tmpdir(), `table-transform-${sheet_id}-${Date.now()}.xlsx`)
+      await download_google_sheet({
+        url: input,
+        output_file: temp_file,
+        service_account: args.service_account || undefined,
+      })
+      input = temp_file
     }
-    return
+
+    if (args.list) {
+      let names = list_sheet_names(input)
+      for (let name of names) {
+        console.log(name)
+      }
+      return
+    }
+
+    let output =
+      args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
+    let sheets = read_file({
+      file: input,
+      separator: args.input_separator,
+      trim_string: args.trim_string,
+      trim_rows: args.trim_rows,
+      trim_cols: args.trim_cols,
+      fields: args.fields,
+      exclude_fields: args.exclude_fields,
+    })
+    write_file({
+      file: output,
+      sheets,
+      show_name: args.show_name,
+      separator: args.output_separator,
+      json_format: args.json_format,
+    })
+  } finally {
+    if (temp_file) {
+      rmSync(temp_file, { force: true })
+    }
   }
-  let output =
-    args.output === '/dev/stdout' ? '/dev/stdout.' + args.format : args.output
-  let sheets = read_file({
-    file: args.input,
-    separator: args.input_separator,
-    trim_string: args.trim_string,
-    trim_rows: args.trim_rows,
-    trim_cols: args.trim_cols,
-    fields: args.fields,
-    exclude_fields: args.exclude_fields,
-  })
-  write_file({
-    file: output,
-    sheets,
-    show_name: args.show_name,
-    separator: args.output_separator,
-    json_format: args.json_format,
-  })
 }
-main()
+
+main().catch(error => {
+  console.error(String(error))
+  process.exit(1)
+})

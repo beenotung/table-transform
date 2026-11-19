@@ -1033,3 +1033,10 @@ export function objects_to_rows<T>(
   }
   return rows
 }
+
+export {
+  download_google_sheet,
+  extract_google_sheet_id,
+  is_google_sheet_url,
+  type ServiceAccountCredentials,
+} from './google-sheet'
